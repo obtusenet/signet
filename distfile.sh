@@ -2,7 +2,9 @@
 # Copyright (c) 2026 Obtuse Networking LLC
 # SPDX-License-Identifier: MIT
 # distfile.sh - Create the source archive: by default the zip used by the OpenBSD
-# port, or with "tar" the source tarball made by `make build`.
+# port, or with "tar" the source tarball made by `make build`.  "both" makes the
+# two from one staged tree, so they carry the same SBOM and commit; a release
+# uses it.
 #
 # The archive holds the tracked source plus the `vendor` tree, so the port
 # builds with no network access (GOPROXY=off, GOFLAGS=-mod=vendor).  It is
@@ -14,10 +16,10 @@ set -eu
 VERSION="${VERSION:-0.14.1}"
 DISTNAME="signet-${VERSION}"
 case "${1:-zip}" in
-zip) DISTFILE="${DISTNAME}.zip" ;;
+zip | both) DISTFILE="${DISTNAME}.zip" ;;
 tar) DISTFILE="${DISTNAME}.tar.gz" ;;
 *)
-	echo "usage: distfile.sh [zip|tar]" >&2
+	echo "usage: distfile.sh [zip|tar|both]" >&2
 	exit 1
 	;;
 esac
@@ -34,6 +36,7 @@ fi
 echo "Creating distribution file: ${DIST_DIR}/${DISTFILE}"
 mkdir -p "${DIST_DIR}"
 rm -f "${DIST_DIR}/${DISTFILE}"
+[ "${1:-zip}" = both ] && rm -f "${DIST_DIR}/${DISTNAME}.tar.gz"
 DISTABS=$(cd "${DIST_DIR}" && pwd)
 rm -rf "${STAGE_DIR}"
 mkdir -p "${STAGE_DIR}/${DISTNAME}"
@@ -79,10 +82,10 @@ func init() {
 }
 EOF
 
-if [ "${1:-zip}" = tar ]; then
-	tar -czf "${DISTABS}/${DISTFILE}" -C "${STAGE_DIR}" "${DISTNAME}"
-	echo "Created ${DIST_DIR}/${DISTFILE}"
-	exit 0
+if [ "${1:-zip}" != zip ]; then
+	tar -czf "${DISTABS}/${DISTNAME}.tar.gz" -C "${STAGE_DIR}" "${DISTNAME}"
+	echo "Created ${DIST_DIR}/${DISTNAME}.tar.gz"
+	[ "$1" = tar ] && exit 0
 fi
 
 (cd "${STAGE_DIR}" && zip -q -X -r "${DISTABS}/${DISTFILE}" \

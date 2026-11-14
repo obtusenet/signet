@@ -3,7 +3,7 @@
 
 .PHONY: vuln vuln-box vuln-host vuln-current build-current test-go-current all build test regress test-go test-js test-hooks test-license test-configs test-sbom sbom configs test-unit test-e2e test-web-servers clean run \
 	fmt vet lint install distfile man install-man \
-	build-package deploy-package box release docker-image test-docker test-web test-linux deb test-deb freebsd-package test-freebsd
+	build-package deploy-package box check-dist release docker-image test-docker test-web test-linux deb test-deb freebsd-package test-freebsd
 
 BINARY_NAME=signet
 BUILD_DIR=build
@@ -214,10 +214,18 @@ endef
 # Build the OpenBSD package on the test box from the working tree: distfile.sh
 # here, then `make package` in /usr/ports there, which runs the Go tests in the
 # ports sandbox.  Services are not touched.
+# DIST_READY=1 (as release gives it) sends the zip already in dist/ with the
+# committed distinfo instead, so the archive the release publishes is the one
+# the box builds, and it is not overwritten.
 build-package:
 	$(call need,TESTBOX)
 	@mkdir -p $(BUILD_DIR)
-	./distfile.sh > $(BUILD_DIR)/distfile.out
+	@if test -n "$(DIST_READY)"; then \
+		$(MAKE) --no-print-directory check-dist && \
+		cp contrib/packaging/openbsd/www/signet/distinfo $(BUILD_DIR)/distfile.out; \
+	else \
+		./distfile.sh > $(BUILD_DIR)/distfile.out; \
+	fi
 	ssh $(TESTBOX) 'cat > /tmp/signet-$(VERSION).zip' < $(DIST_DIR)/signet-$(VERSION).zip
 	grep -E '^(SHA256|SIZE) ' $(BUILD_DIR)/distfile.out | ssh $(TESTBOX) 'cat > /tmp/signet-$(VERSION).distinfo'
 	$(call run_on_box,box-build-package.sh)
@@ -229,6 +237,20 @@ deploy-package:
 	$(call run_on_box,box-deploy-package.sh)
 
 box: build-package deploy-package
+
+# The archives in dist/ are the ones the committed distinfo files describe.
+check-dist:
+	@set -e; z=signet-$(VERSION).zip; t=signet-$(VERSION).tar.gz; \
+	for f in $$z $$t; do test -f $(DIST_DIR)/$$f || { echo "$(DIST_DIR)/$$f is missing" >&2; exit 1; }; done; \
+	ok=0; \
+	check() { \
+		want=`sed -n "s/^SHA256 ($$2) = //p" $$1`; size=`sed -n "s/^SIZE ($$2) = //p" $$1`; \
+		have=`sha256sum $(DIST_DIR)/$$2 | cut -d' ' -f1`; hsize=`stat -c %s $(DIST_DIR)/$$2`; \
+		if test "$$want" = "$$have" && test "$$size" = "$$hsize"; then echo "ok   - $$2 matches $$1"; \
+		else echo "FAIL - $$2 does not match $$1" >&2; ok=1; fi; }; \
+	check contrib/packaging/openbsd/www/signet/distinfo $$z; \
+	check contrib/packaging/freebsd/www/signet/distinfo $$t; \
+	exit $$ok
 
 # The FreeBSD port's distinfo for this version's tarball, written by freebsd-package.
 FBSD_DISTINFO=$(BUILD_DIR)/signet-$(VERSION).fbsd-distinfo
@@ -263,8 +285,10 @@ test-freebsd:
 # Order mirrors the release rules: lint+test+compile must pass BEFORE the
 # version is bumped; then bump commit, distfile + distinfo commit, tag,
 # push branch and tag, and finally `make box`.
-# The distfile must be created after the bump commit, because distfile.sh
-# packages the committed tree.
+# The archives are made once, from the bump commit while the tree is clean, and
+# before their checksums enter it: the distinfo commit cannot describe an
+# archive that holds itself.  `make box` then builds that same zip
+# (DIST_READY=1), and check-dist proves dist/ still matches the tag.
 release:
 ifeq ($(origin VERSION),command line)
 	@echo "releasing signet $(VERSION)"
@@ -294,20 +318,23 @@ ifeq ($(origin VERSION),command line)
 		"$(VERSION)" "$(VERSION)" "`LC_ALL=C date -R`"; cat $$cl; } > $$cl.new && mv $$cl.new $$cl; \
 	git add -u; \
 	git commit -m "$(VERSION): version bump"; \
-	echo "creating distfile from the committed tree"; \
-	./distfile.sh | grep -E '^(SHA256|SIZE) ' \
+	echo "creating the archives from the committed tree"; \
+	./distfile.sh both > $(BUILD_DIR)/distfile.out; \
+	grep -E '^(SHA256|SIZE) ' $(BUILD_DIR)/distfile.out \
 		> contrib/packaging/openbsd/www/signet/distinfo; \
-	./distfile.sh tar > /dev/null; \
 	f=signet-$(VERSION).tar.gz; \
 	{ echo "TIMESTAMP = `date +%s`"; \
 	  echo "SHA256 ($$f) = `sha256sum $(DIST_DIR)/$$f | cut -d' ' -f1`"; \
 	  echo "SIZE ($$f) = `stat -c %s $(DIST_DIR)/$$f`"; } > contrib/packaging/freebsd/www/signet/distinfo; \
 	git add contrib/packaging/openbsd/www/signet/distinfo contrib/packaging/freebsd/www/signet/distinfo; \
 	git commit -m "port: new distfile checksum"; \
+	$(MAKE) --no-print-directory check-dist; \
 	git tag -a "v$(VERSION)" -m "signet $(VERSION)"; \
 	echo "tagged v$(VERSION)"
 	@if test -n "$(SKIP_PUSH)"; then echo "SKIP_PUSH set - not pushing"; else git push origin HEAD "refs/tags/v$(VERSION)"; fi
-	@if test -n "$(SKIP_BOX)"; then echo "SKIP_BOX set - not building on the box"; else $(MAKE) --no-print-directory box; fi
+	@if test -n "$(SKIP_BOX)"; then echo "SKIP_BOX set - not building on the box"; else $(MAKE) --no-print-directory box DIST_READY=1; fi
+	@$(MAKE) --no-print-directory check-dist
+	@echo "publish $(DIST_DIR)/signet-$(VERSION).{tar.gz,zip,spdx.json} with v$(VERSION)"
 else
 	@echo "usage: make release VERSION=x.y.z [SKIP_PUSH=1] [SKIP_BOX=1] [TESTBOX=user@host]"; exit 1
 endif
