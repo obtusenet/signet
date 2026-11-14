@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 PORTNAME=	signet
-DISTVERSION=	0.14.1
+DISTVERSION=	0.14.2
 CATEGORIES=	www
 # The distfile is `make build`'s tarball, with vendor/, attached to the GitHub
 # release.  The box targets copy it into DISTDIR, so a build before the release

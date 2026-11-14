@@ -3,7 +3,7 @@
 
 COMMENT =	multi-factor authentication server
 
-DISTNAME =	signet-0.14.1
+DISTNAME =	signet-0.14.2
 DISTFILES =	${DISTNAME}.zip
 EXTRACT_SUFX =	.zip
 # The zip is attached to the GitHub release.  Before the release is published,
