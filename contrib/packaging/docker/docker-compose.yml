@@ -1,0 +1,29 @@
+services:
+  signet:
+    # `make docker-image` builds this with its version details.
+    image: signet:latest
+    build:
+      context: ../../..
+      dockerfile: contrib/packaging/docker/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      # Your copy of config/example.yaml with cookie_secret set; see README.md.
+      - ./config.yaml:/etc/signet/config.yaml:ro
+      - signet-data:/var/lib/signet
+      - signet-logs:/var/log/signet
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      # The mail relay for PINs; see "Mail" in README.md.
+      # - SMTPHOST=mail.example.com
+    networks:
+      - signet-network
+
+volumes:
+  signet-data:
+  signet-logs:
+
+networks:
+  signet-network:
+    driver: bridge

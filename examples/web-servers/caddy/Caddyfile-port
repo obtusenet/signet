@@ -1,0 +1,51 @@
+(signet) {
+	@signet path /login /logout /session /recover /register /account
+	handle @signet {
+		reverse_proxy 127.0.0.1:9090
+	}
+	handle /webauthn/* {
+		reverse_proxy 127.0.0.1:9090
+	}
+	handle /email-pin/* {
+		reverse_proxy 127.0.0.1:9090
+	}
+	handle /avatar/* {
+		reverse_proxy 127.0.0.1:9090
+	}
+	handle /static/js/webauthn.js {
+		reverse_proxy 127.0.0.1:9090
+	}
+}
+
+# signet variant: listen: ":9090"  (TCP on loopback)
+#
+# Caddy serves the app on the same origin as signet's auth URIs, so the
+# signetid cookie stays first-party.  Loopback-only TCP works here because
+# both processes share this host; see Caddyfile-socket for the unix-socket
+# transport.
+#
+# http:// is plain HTTP, which browsers will not send signet's cookie over
+# unless cookie_secure is false.  Drop the http:// and Caddy terminates TLS.
+
+http://app.example.com {
+	import signet
+
+	handle {
+		# Protect the app with signet's /session: on success Caddy copies
+		# the Remote-User / Remote-Email response headers onto the upstream
+		# request as X-Forwarded-User / X-Forwarded-Email; on 401 the
+		# browser is sent to the login page with a referrer back here.
+		forward_auth 127.0.0.1:9090 {
+			uri /session
+			copy_headers Remote-User Remote-Email Remote-Avatar
+			@unauthenticated status 401
+			handle_response @unauthenticated {
+				redir * /login?referrer={uri} 302
+			}
+		}
+		reverse_proxy 127.0.0.1:8080 {
+			header_up X-Forwarded-User {http.request.header.Remote-User}
+			header_up X-Forwarded-Email {http.request.header.Remote-Email}
+		}
+	}
+}

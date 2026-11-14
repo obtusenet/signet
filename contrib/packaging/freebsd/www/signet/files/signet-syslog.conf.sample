@@ -1,0 +1,7 @@
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+#
+# signet's log, from signet itself (log_syslog) and from daemon(8).
+!signet
+*.*						/var/log/signet.log
+!*

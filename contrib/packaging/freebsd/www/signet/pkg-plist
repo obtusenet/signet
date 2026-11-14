@@ -1,0 +1,11 @@
+bin/signet
+@sample(root,signet,0640) %%ETCDIR%%/config.yaml.sample
+@dir(root,signet,0750) %%ETCDIR%%
+@dir(signet,signet,0750) /var/db/signet
+@sample etc/syslog.d/signet.conf.sample
+@sample etc/newsyslog.conf.d/signet.conf.sample
+share/man/man1/signet.1.gz
+share/man/man5/signet-config.yaml.5.gz
+share/man/man5/signet-hooks.5.gz
+share/man/man5/signet-template.5.gz
+share/man/man7/signet-api.7.gz

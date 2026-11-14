@@ -1,0 +1,17 @@
+signet (0.14.0-1) unstable; urgency=medium
+
+  * Release 0.14.0.
+
+ -- Code <code@obtusenet.com>  Sat, 14 Nov 2026 00:56:29 +0000
+
+signet (0.13.28-1) unstable; urgency=medium
+
+  * Release 0.13.28.
+
+ -- Code <code@obtusenet.com>  Fri, 13 Nov 2026 13:29:04 +0000
+
+signet (0.13.27-1) unstable; urgency=medium
+
+  * First Debian package.
+
+ -- Code <code@obtusenet.com>  Thu, 12 Nov 2026 12:00:00 +0000

@@ -1,0 +1,14 @@
+[
+{ type: install
+  message: <<EOM
+signet is installed but not started.  Set cookie_secret in
+%%ETCDIR%%/config.yaml (openssl rand -hex 32), then:
+
+  sysrc signet_enable=YES
+  service signet start
+
+Commands read that file without -config: signet user-add you@example.com
+The log is /var/log/signet.log, through syslog.
+EOM
+}
+]

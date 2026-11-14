@@ -1,0 +1,446 @@
+.\"-
+.\" Copyright (c) 2026 Obtuse Networking LLC
+.\" SPDX-License-Identifier: MIT
+.\" $OpenBSD$
+.\"
+.Dd $Mdocdate: November 5 2026 $
+.Dt SIGNET 1
+.Os
+.Sh NAME
+.Nm signet
+.Nd web authentication system
+.Sh SYNOPSIS
+.Nm
+.Cm help
+.Nm
+.Cm serve
+.Op Fl config Ar path
+.Nm
+.Cm user-add
+.Op Fl config Ar path
+.Op Fl hash Ar algorithm
+.Op Fl password-stdin
+.Ar email
+.Op Ar password
+.Nm
+.Cm user-list
+.Op Fl config Ar path
+.Nm
+.Cm user-approve
+.Op Fl config Ar path
+.Ar email ...
+.Nm
+.Cm user-delete
+.Op Fl config Ar path
+.Fl confirm
+.Ar email
+.Nm
+.Cm webauthn-invite
+.Op Fl config Ar path
+.Op Fl ttl Ar duration
+.Op Fl origin Ar url
+.Ar email
+.Nm
+.Cm user-list-webauthn
+.Op Fl config Ar path
+.Op Fl email Ar email
+.Op Ar email
+.Nm
+.Cm user-delete-totp
+.Op Fl config Ar path
+.Op Fl confirm
+.Ar email
+.Nm
+.Cm user-unlock
+.Op Fl config Ar path
+.Ar email
+.Nm
+.Cm avatar-remove
+.Op Fl config Ar path
+.Ar email
+.Nm
+.Cm user-delete-webauthn
+.Op Fl config Ar path
+.Fl id Ar credential_id
+.Fl confirm
+.Nm
+.Cm client-add
+.Op Fl config Ar path
+.Op Fl origins Ar list
+.Ar name
+.Nm
+.Cm client-list
+.Op Fl config Ar path
+.Nm
+.Cm client-revoke
+.Op Fl config Ar path
+.Ar name
+.Nm
+.Cm version
+.Sh DESCRIPTION
+.Nm
+is a web authentication system.
+Users sign in with a password, a WebAuthn security key, or a PIN sent by email,
+optionally followed by a TOTP code, and receive a signed session cookie.
+.Pp
+.Nm
+reads its configuration from a YAML file
+.Po
+.Dq config.yaml
+by default
+.Pc .
+See
+.Xr signet-config.yaml 5 .
+.Pp
+.Cm serve
+listens for HTTP requests and serves
+.Pa /login ,
+.Pa /recover ,
+.Pa /session
+and
+.Pa /logout ,
+plus the validation API at
+.Pa /api/v1/validate .
+A successful login is sent to the location given by the
+.Va referrer
+form field, the
+.Cm ?referrer=
+query parameter, or the HTTP
+.Ev Referer
+header, in that order; without any of them it goes to
+.Pa / .
+Only local paths, URLs on the same host, and URLs on hosts listed in
+.Va allowed_redirect_hosts
+are accepted.
+See
+.Xr signet-template 5
+for the templates and their variables, and
+.Xr signet-api 7
+for the HTTP interface.
+.Pp
+Options must come before positional arguments, and may be written with one
+dash or two.
+.Pp
+.Cm serve
+refuses to start until
+.Va cookie_secret
+is set, and exits non-zero when it cannot start, for example when the listen
+address is taken.
+Other commands do not need the secret.
+.Sh OPTIONS
+The following options are available for all commands:
+.Bl -tag -width Ds
+.It Fl config Ar path
+Path to the configuration file.
+Default:
+.Dq config.yaml .
+.El
+.Pp
+The following options are available for
+.Cm user-add :
+.Bl -tag -width Ds
+.It Fl hash Ar algorithm
+Hash algorithm to use for password hashing.
+Must be one of:
+.Dq bcrypt ,
+.Dq argon2id .
+Default:
+.Dq argon2id .
+.El
+.Pp
+The following options are available for
+.Cm user-delete :
+.Bl -tag -width Ds
+.It Fl confirm
+Confirm deletion.
+Without this flag, the command prints what would be deleted and exits non-zero.
+.El
+.Pp
+The following options are available for
+.Cm webauthn-invite :
+.Bl -tag -width Ds
+.It Fl ttl Ar duration
+How long the link stays valid, for example
+.Dq 2h .
+Default:
+.Dq 24h .
+.It Fl origin Ar url
+Origin to build the link from.
+Default: the first entry of
+.Va webauthn_origins .
+.El
+.Pp
+The following options are available for
+.Cm user-list-webauthn :
+.Bl -tag -width Ds
+.It Fl email Ar email
+Email address to list WebAuthn credentials for.
+If omitted, the email is taken as the first positional argument.
+.El
+.Pp
+The following options are available for
+.Cm user-delete-webauthn :
+.Bl -tag -width Ds
+.It Fl id Ar credential_id
+The credential ID to delete.
+.It Fl confirm
+Confirm deletion.
+Without this flag, the command prints what would be deleted and exits non-zero.
+.El
+.Pp
+The following options are available for
+.Cm client-add :
+.Bl -tag -width Ds
+.It Fl origins Ar list
+Comma-separated browser origins allowed to call the validation API from
+JavaScript.
+Only needed when a browser, rather than a server, calls
+.Pa /api/v1/validate ;
+such calls are answered with CORS headers for the listed origins.
+.El
+.Sh COMMANDS
+.Bl -tag -width Ds
+.It Ar help
+Print a brief usage message and exit.
+.It Ar version
+Print the version, build time, and git hash, then exit.
+.It Ar serve
+Start the signet HTTP server.
+The server listens on the address configured in
+.Xr signet-config.yaml 5
+(
+.Dq listen ) .
+.Pp
+The server supports the following signals:
+.Bl -tag -width Ds
+.It Dv SIGHUP
+Read the configuration file and the templates again, and serve the next
+requests by them, without closing the listener
+.Po
+.Ql rcctl reload signet ,
+.Ql systemctl reload signet
+.Pc .
+A request already being answered finishes as it started.
+If the file or a template is wrong, the running configuration stays and the
+log says why.
+.Va listen ,
+.Va protocol ,
+.Va socket_mode ,
+.Va database_path ,
+.Va csv_path
+and
+.Va log_syslog
+take effect only at a restart; a reload keeps them and logs which changed.
+Rate-limit counts kept in memory start over; the account lockout, sessions and
+everything else in the database stay.
+.It Dv SIGTERM , Dv SIGINT
+Graceful shutdown.
+.El
+.It Ar user-add Ar email Op Ar password
+Add a new user to the CSV user store.
+If
+.Ar password
+is not provided, the account has no password and cannot use password sign-in;
+it can sign in with an emailed PIN or with a key enrolled through
+.Cm webauthn-invite ,
+and it can set a password through password recovery.
+A password given as an argument can be seen by
+.Xr ps 1
+and is kept in shell history, so
+.Cm user-add
+warns when it is given that way.
+.Fl password-stdin
+reads it from the first line of standard input instead; only the line ending is
+removed, an empty line is an error, and giving an argument as well is an error.
+.Pp
+The user is created with the
+.Dq approved
+flag.
+.Ar email
+must be one plain
+.Li local@domain ,
+not a list, a name or a quoted local part.
+Addresses match without regard to case, so an address that differs from an
+existing account only in case is refused.
+The commands that take an
+.Ar email
+find the account the same way.
+.It Ar user-list
+List all users in the CSV store.
+.It Ar user-approve Ar email ...
+Add the
+.Dq approved
+flag.
+While
+.Va self_registration_approval
+is
+.Dq required ,
+an account with
+.Dq self_registered
+and without
+.Dq approved
+cannot sign in by any method.
+Accounts created by
+.Cm user-add
+by older versions carry
+.Dq self_registered
+and need this command once.
+.It Ar user-delete Ar email
+Delete an account, its sessions, its WebAuthn credentials and TOTP keys, its
+picture, any invite and any recovery link.
+Requires
+.Fl confirm .
+Removing a row from the CSV file by hand, or setting the
+.Dq locked
+flag, stops new logins but leaves existing sessions valid until they expire.
+.It Ar webauthn-invite Ar email
+Print a one-time link that enrolls a security key on the account without
+signing in, for accounts with no other way to sign in.
+The account must already exist.
+A new invite replaces any earlier one for that address.
+It refuses when the configuration has WebAuthn off.
+The token is in the URL fragment, so it does not reach web-server logs;
+send the link over a channel you trust, since anyone holding it can add a key.
+.It Ar user-list-webauthn Op Ar email
+List WebAuthn credentials for a user, with each one's attestation format and
+whether it may be backed up, as a synced passkey may.
+If
+.Ar email
+is not provided as an argument, use
+.Fl email .
+.It Ar user-delete-totp Ar email
+Remove every TOTP key and recovery code of an account, for someone who has lost
+their authenticator and their recovery codes.
+Signing in then asks for no code until a new key is added.
+Requires
+.Fl confirm .
+.It Ar user-unlock Ar email
+Clear the account's count of failed sign-ins, ending a lock by
+.Va account_lockout_threshold
+.Pq see Xr signet-config.yaml 5 .
+A finished sign-in, by any method, or a password recovery clears it as well.
+.It Ar avatar-remove Ar email
+Remove the account's picture, which then stops being served.
+The account can set a new one, if
+.Va avatars
+is enabled.
+.It Ar user-delete-webauthn
+Delete a WebAuthn credential and end every session of its account, however each
+one signed in, so that whoever used the key does not stay signed in.
+Requires
+.Fl id
+and
+.Fl confirm .
+.It Ar client-add Ar name
+Register an application allowed to call
+.Pa /api/v1/validate ,
+and print its API key.
+The key is shown once; only its hash is stored.
+.It Ar client-list
+List registered applications, their allowed origins and creation time.
+.It Ar client-revoke Ar name
+Delete a registered application.
+Its API key stops working immediately.
+.El
+.Sh FILES
+Without
+.Fl config ,
+commands read
+.Pa /etc/signet/config.yaml
+when signet comes from the
+.Ox
+or Debian package, or the Docker image,
+.Pa /usr/local/etc/signet/config.yaml
+from the
+.Fx
+package, and
+.Pa config.yaml
+in the current directory when it is built from source.
+The file holds
+.Va cookie_secret ,
+so keep it unreadable by other users.
+.Cm serve
+logs a warning when this file, the CSV file or the database is world-readable.
+.Pp
+The data directory is
+.Pa /var/www/signet
+on
+.Ox
+and
+.Pa /var/lib/signet
+on Debian and Linux, and
+.Pa /var/db/signet
+on
+.Fx .
+The Debian package keeps the working copies of the web files in
+.Pa /etc/signet/templates
+and
+.Pa /etc/signet/static ,
+and the shipped ones in
+.Pa /usr/share/signet/web ;
+the
+.Fx
+package in
+.Pa /usr/local/etc/signet
+and
+.Pa /usr/local/share/signet/web .
+.Pp
+Example configurations ship under
+.Pa /usr/local/share/examples/signet
+on
+.Ox
+(and
+.Pa /usr/share/doc/signet/examples
+on Linux): a sample
+.Pa config.yaml ,
+the web templates and static files, example claims hooks in
+.Pa hooks/ ,
+and web-server sample configs in
+.Pa web-servers/
+for Caddy, nginx, and
+.Ox
+.Xr httpd 8 .
+.Sh EXAMPLES
+Add a new user with a password, kept out of the process list and shell
+history:
+.Pp
+.Dl signet user-add -password-stdin alice@example.com < password-file
+.Pp
+Start the server:
+.Pp
+.Dl signet serve
+.Pp
+List all users:
+.Pp
+.Dl signet user-list
+.Pp
+Start the server with a custom config:
+.Pp
+.Dl signet serve -config /etc/signet/config.yaml
+.Pp
+Approve a self-registered account:
+.Pp
+.Dl signet user-approve alice@example.com
+.Pp
+Delete an account with its sessions and security keys:
+.Pp
+.Dl signet user-delete -confirm alice@example.com
+.Pp
+Print a one-time link, valid for two hours, to enroll a security key:
+.Pp
+.Dl signet webauthn-invite -ttl 2h alice@example.com
+.Sh SEE ALSO
+.Xr signet-config.yaml 5 ,
+.Xr signet-hooks 5 ,
+.Xr signet-template 5 ,
+.Xr signet-api 7
+.Sh HISTORY
+.Nm
+was first released in 2026.
+.Sh CAVEATS
+Removing an account from the CSV file by hand, or setting its
+.Dq locked
+flag, stops new logins but leaves existing sessions valid until they expire.
+Use
+.Cm user-delete
+to end them.

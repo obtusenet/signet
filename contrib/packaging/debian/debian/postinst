@@ -1,0 +1,55 @@
+#!/bin/sh
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+set -e
+
+# A setting from the config file when it is an absolute path, else the default.
+config_path() { # key default
+	value=$(sed -n "s/^$1:[[:space:]]*\"\{0,1\}\([^\"#]*\).*/\1/p" /etc/signet/config.yaml | head -1 | sed 's/[[:space:]]*$//')
+	case "$value" in
+	/*) echo "$value" ;;
+	*) echo "$2" ;;
+	esac
+}
+
+if [ "$1" = configure ]; then
+	if ! getent passwd _signet > /dev/null; then
+		adduser --system --group --home /var/lib/signet --no-create-home \
+			--comment "Signet authentication server" _signet > /dev/null
+	fi
+	install -d -o _signet -g _signet -m 0750 /var/lib/signet
+	install -d -o root -g _signet -m 0750 /etc/signet
+
+	# Not a conffile: it holds cookie_secret, so it is written once and never again.
+	if [ ! -e /etc/signet/config.yaml ]; then
+		install -o root -g _signet -m 0640 /usr/share/signet/config.yaml.example /etc/signet/config.yaml
+		echo "signet: set cookie_secret in /etc/signet/config.yaml (openssl rand -hex 32),"
+		echo "signet: then start it with: systemctl enable --now signet"
+	fi
+
+	# The working copies of the web files; an edited one is kept and reported.
+	/usr/share/signet/install-web.sh /usr/share/signet/web/templates \
+		"$(config_path templates_dir /etc/signet/templates)" /etc/signet/.web-templates.sha256
+	/usr/share/signet/install-web.sh /usr/share/signet/web/static \
+		"$(config_path static_dir /etc/signet/static)" /etc/signet/.web-static.sha256
+
+	# What deploy/install.sh left would hide this package's unit, or run the other binary.
+	if [ -e /etc/systemd/system/signet.service ]; then
+		echo "signet: /etc/systemd/system/signet.service, from deploy/install.sh, hides this"
+		echo "signet: package's unit.  Remove it, then run: systemctl daemon-reload"
+	fi
+	if [ -d /var/lib/signet ] && [ -n "$(find /var/lib/signet -maxdepth 1 ! -user _signet 2>/dev/null)" ]; then
+		echo "signet: files in /var/lib/signet are not owned by _signet (deploy/install.sh ran"
+		echo "signet: signet as the user signet).  Give them to _signet before starting it."
+	fi
+fi
+
+#DEBHELPER#
+
+# A running service moves to this version; a stopped one stays stopped.
+if [ "$1" = configure ] && [ -n "$2" ] && [ -d /run/systemd/system ]; then
+	deb-systemd-invoke try-restart signet.service ||
+		echo "signet: the restart failed; see: journalctl -u signet" >&2
+fi
+
+exit 0

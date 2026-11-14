@@ -1,0 +1,778 @@
+{{define "login"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signet - Login</title>
+  <style>
+    /* Light is the default; the dark palette applies only when the
+       browser reports prefers-color-scheme: dark. */
+    :root {
+      color-scheme: light dark;
+
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --text: #333333;
+      --heading: #1a1a2e;
+      --label: #444444;
+      --muted: #666666;
+      --faint: #999999;
+      --border: #e1e5eb;
+      --input-bg: #ffffff;
+      --primary: #4a90e2;
+      --primary-hover: #357abd;
+      --primary-disabled: #a8c7e8;
+      --secondary: #2c3e50;
+      --secondary-hover: #1a252f;
+      --secondary-disabled: #8e99a4;
+      --error-bg: #ffeeee;
+      --error-fg: #cc3333;
+      --error-border: #ffcccc;
+      --success-bg: #eeffee;
+      --success-fg: #33aa33;
+      --success-border: #ccffcc;
+      --shadow: rgba(0, 0, 0, 0.08);
+      --focus-ring: rgba(74, 144, 226, 0.15);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12151a;
+        --surface: #1b1f27;
+        --text: #d7dce5;
+        --heading: #eef2f8;
+        --label: #c2c9d4;
+        --muted: #9aa4b2;
+        --faint: #7b8494;
+        --border: #2f3742;
+        --input-bg: #141821;
+        --primary: #5aa0f0;
+        --primary-hover: #74b0f5;
+        --primary-disabled: #33506e;
+        --secondary: #2b3644;
+        --secondary-hover: #3a4a5c;
+        --secondary-disabled: #3d4652;
+        --error-bg: #3a1f22;
+        --error-fg: #ffb4b4;
+        --error-border: #5d2b30;
+        --success-bg: #16301f;
+        --success-fg: #9fe0a8;
+        --success-border: #245c33;
+        --shadow: rgba(0, 0, 0, 0.5);
+        --focus-ring: rgba(90, 160, 240, 0.3);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 60px auto;
+      padding: 40px;
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: 0 2px 20px var(--shadow);
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--heading);
+      margin-bottom: 32px;
+      font-size: 28px;
+      font-weight: 600;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--label);
+    }
+
+    input[type="email"],
+    input[type="password"],
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 15px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="email"]:focus,
+    input[type="password"]:focus,
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--focus-ring);
+    }
+
+    button {
+      width: 100%;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px var(--focus-ring);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-primary:disabled {
+      background: var(--primary-disabled);
+      cursor: not-allowed;
+    }
+
+    .btn-webauthn {
+      background: var(--secondary);
+      color: #ffffff;
+      margin-top: 12px;
+    }
+
+    .btn-webauthn:hover:not(:disabled) {
+      background: var(--secondary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px var(--shadow);
+    }
+
+    .btn-webauthn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-webauthn:disabled {
+      background: var(--secondary-disabled);
+      cursor: not-allowed;
+    }
+
+    .divider {
+      text-align: center;
+      margin: 24px 0;
+      position: relative;
+      color: var(--faint);
+      font-size: 14px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 40%;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .divider::before {
+      left: 0;
+    }
+
+    .divider::after {
+      right: 0;
+    }
+
+    .webauthn-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .error-message {
+      background: var(--error-bg);
+      color: var(--error-fg);
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--error-border);
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .error-message.visible {
+      display: block;
+    }
+
+    .success-message {
+      background: var(--success-bg);
+      color: var(--success-fg);
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--success-border);
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .success-message.visible {
+      display: block;
+    }
+
+    .links {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .links a {
+      color: var(--primary);
+      text-decoration: none;
+      margin: 0 8px;
+    }
+
+    .links a:hover {
+      text-decoration: underline;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .loading.visible {
+      display: block;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Adding a second factor during sign-in. */
+    #enrol-step form { margin-top: 16px; }
+    #enrol-step p { margin: 12px 0; line-height: 1.5; }
+    .totp-qr { display: block; margin: 12px auto; background: #ffffff; padding: 8px; border-radius: 8px; }
+    .recovery-codes { columns: 2; padding-left: 20px; margin: 12px 0 20px; }
+    a.btn-primary { display: block; text-align: center; text-decoration: none; padding: 12px 20px; border-radius: 8px; }
+    .btn-secondary { background: transparent; color: var(--primary); border: 1px solid var(--primary); }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Signet Login</h1>
+
+    <div id="error-message" class="error-message{{if .Error}} visible{{end}}">{{.Error}}</div>
+    <div id="success-message" class="success-message{{if .Message}} visible{{end}}">{{.Message}}</div>
+
+    <form id="code-form" method="POST" action="{{basePath}}/login"{{if not (or (eq .Step "code") (eq .Step "mail"))}} hidden{{end}}>
+      <input type="hidden" id="code-pending" name="pending" value="{{if ne .Step "enrol"}}{{.Pending}}{{end}}">
+      <input type="hidden" name="referrer" value="{{.Referrer}}">
+      <div class="form-group">
+        <label for="code" id="code-label">{{if eq .Step "mail"}}PIN from the message just sent to you{{else}}Code from your authenticator{{end}}</label>
+        <input type="text" id="code" name="code" required autocomplete="one-time-code" placeholder="123456">
+      </div>
+      <button type="submit" class="btn-primary">Verify Code</button>
+      <p class="code-hint" id="code-hint"{{if eq .Step "mail"}} hidden{{end}}>Lost your authenticator? Enter a recovery code instead.</p>
+    </form>
+
+    {{if eq .Step "enrol"}}
+    <div id="enrol-step">
+      {{if .RecoveryCodes}}
+      <p>Keep these recovery codes somewhere safe. Each one signs in once without the app, if you lose it. They are not shown again.</p>
+      <ul class="recovery-codes">
+        {{range .RecoveryCodes}}<li><code>{{.}}</code></li>
+        {{end}}
+      </ul>
+      <a class="btn-primary" href="{{.Continue}}">Continue</a>
+      {{else}}
+      <p>This site needs a second way to sign in besides your password or a mailed PIN. Add one now: signing in finishes when it is added.</p>
+      {{if .EnrolTOTP}}
+        {{if .TOTPStarted}}
+          {{if .TOTPQR}}
+          <p>Scan this code with your authenticator app, or type the key into it.</p>
+          <img class="totp-qr" src="{{.TOTPQR}}" alt="QR code for your authenticator app" width="200" height="200">
+          <p>Key: <code>{{.TOTPSecret}}</code></p>
+          {{end}}
+          <form method="POST" action="{{basePath}}/login">
+            <input type="hidden" name="pending" value="{{.Pending}}">
+            <input type="hidden" name="referrer" value="{{.Referrer}}">
+            <input type="hidden" name="action" value="totp-finish">
+            <div class="form-group">
+              <label for="enrol-code">Code the app shows</label>
+              <input type="text" id="enrol-code" name="code" required autocomplete="one-time-code" placeholder="123456">
+            </div>
+            <button type="submit" class="btn-primary">Add the app and sign in</button>
+          </form>
+          <form method="POST" action="{{basePath}}/login">
+            <input type="hidden" name="pending" value="{{.Pending}}">
+            <input type="hidden" name="referrer" value="{{.Referrer}}">
+            <input type="hidden" name="action" value="totp-begin">
+            <button type="submit" class="btn-secondary">Start again with a new key</button>
+          </form>
+        {{else}}
+          <form method="POST" action="{{basePath}}/login">
+            <input type="hidden" name="pending" value="{{.Pending}}">
+            <input type="hidden" name="referrer" value="{{.Referrer}}">
+            <input type="hidden" name="action" value="totp-begin">
+            <button type="submit" class="btn-primary">Add an authenticator app</button>
+          </form>
+        {{end}}
+      {{end}}
+      {{if and .EnrolKey (not .TOTPStarted)}}
+      <form method="POST" action="{{basePath}}/login">
+        <input type="hidden" name="pending" value="{{.Pending}}">
+        <input type="hidden" name="action" value="key">
+        <button type="submit" class="btn-primary">Add a security key</button>
+      </form>
+      <p class="code-hint">After adding it, sign in with the key.</p>
+      {{end}}
+      {{end}}
+    </div>
+    {{end}}
+
+    <div id="sign-in-methods"{{if .Step}} hidden{{end}}>
+    {{if .PasswordEnabled}}
+    <form id="login-form">
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@example.com">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" placeholder="Enter your password">
+      </div>
+
+      <input type="hidden" name="referrer" value="{{.Referrer}}">
+
+      <button type="submit" class="btn-primary">
+        Sign In with Password
+      </button>
+    </form>
+    {{end}}
+
+    {{if and .PasswordEnabled (or .WebAuthnEnabled .EmailPINEnabled)}}
+    <div class="divider" id="divider-after-password">or</div>
+    {{end}}
+
+    {{if .WebAuthnEnabled}}
+    <button id="webauthn-button" class="btn-webauthn" onclick="handleWebAuthnLogin()">
+      <span class="webauthn-icon">🔑</span>
+      Sign in with Security Key
+    </button>
+    {{end}}
+
+    {{if and .WebAuthnEnabled .EmailPINEnabled}}
+    <div class="divider" id="divider-after-webauthn">or</div>
+    {{end}}
+
+    {{if .EmailPINEnabled}}
+    <form id="email-pin-form">
+      <div class="form-group" id="email-step">
+        <label for="pin-email">Email Address</label>
+        <input type="email" id="pin-email" name="pin-email" required autocomplete="email" placeholder="you@example.com">
+        <button type="submit" class="btn-primary" id="send-pin-button">
+          Send PIN
+        </button>
+      </div>
+
+      <div class="form-group" id="pin-step" style="display: none;">
+        <label for="pin-code">PIN Code</label>
+        <input type="text" id="pin-code" name="pin-code" required autocomplete="one-time-code" placeholder="Enter 6-digit PIN" maxlength="6" pattern="[0-9]{6}">
+        <button type="submit" class="btn-primary">
+          Verify PIN
+        </button>
+      </div>
+    </form>
+    {{end}}
+
+    </div>
+
+    <div id="loading" class="loading">
+      <span class="spinner"></span>
+      Authenticating...
+    </div>
+
+    <div class="links">
+      <a href="{{basePath}}/recover">Forgot Password?</a>
+      {{if .AllowRegistration}}
+      <a href="{{basePath}}/register">Create Account</a>
+      {{end}}
+    </div>
+  </div>
+
+  <script src="{{basePath}}/static/js/webauthn.js" data-base-path="{{basePath}}"></script>
+  <script>
+    // Where this instance's routes are: "" at the root, else its base_path.
+    const signetBase = {{basePath}};
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginForm = document.getElementById('login-form');
+    const webauthnButton = document.getElementById('webauthn-button');
+    const errorMessage = document.getElementById('error-message');
+    const successMessage = document.getElementById('success-message');
+    const loadingDiv = document.getElementById('loading');
+    const referrerField = document.querySelector('input[name="referrer"]');
+
+    // Hostnames signet's configuration allows returning to after login
+    // (allowed_redirect_hosts).  Mirrors the server-side check in
+    // internal/server/server.go: entries are plain hosts, host:port, bare
+    // IPv6 addresses, or bracketed "[ipv6]" / "[ipv6]:port"; IP literals
+    // are canonicalised so full and minified spellings match.
+    const allowedRedirectHosts = {{.AllowedRedirectHosts}};
+
+    function defaultPort(protocol) {
+      return protocol === 'https:' ? '443' : '80';
+    }
+
+    function splitEntry(raw) {
+      const entry = String(raw).trim().toLowerCase();
+      if (!entry) return null;
+      if (entry.startsWith('[')) {
+        const end = entry.indexOf(']');
+        if (end < 0) return null;
+        const rest = entry.slice(end + 1);
+        if (rest === '') return {host: entry.slice(0, end + 1), port: ''};
+        if (rest.startsWith(':') && !rest.slice(1).includes(':')) {
+          return {host: entry.slice(0, end + 1), port: rest.slice(1)};
+        }
+        return null;
+      }
+      if ((entry.match(/:/g) || []).length > 1) {
+        return {host: '[' + entry + ']', port: ''};
+      }
+      const i = entry.lastIndexOf(':');
+      if (i >= 0) return {host: entry.slice(0, i), port: entry.slice(i + 1)};
+      return {host: entry, port: ''};
+    }
+
+    // Browsers store IPv6 hosts in canonical form; normalise entries the
+    // same way so full vs minified spellings compare equal.
+    function canonHost(host) {
+      if (!host.startsWith('[')) return host;
+      try { return new URL('http://' + host + '/').hostname; }
+      catch (e) { return null; }
+    }
+
+    function hostAllowedFor(url) {
+      const urlHost = url.hostname.toLowerCase();
+      const urlPort = url.port || defaultPort(url.protocol);
+      for (const raw of allowedRedirectHosts) {
+        const e = splitEntry(raw);
+        if (!e) continue;
+        const eh = canonHost(e.host);
+        if (eh === null || eh !== urlHost) continue;
+        if (e.port === '' ? urlPort === defaultPort(url.protocol) : e.port === urlPort) return true;
+      }
+      return false;
+    }
+
+    // Same-origin targets become local paths; cross-origin targets navigate
+    // only if their host is in allowedRedirectHosts.  With nowhere to return to,
+    // the account page, as the server does.
+    const defaultReturn = signetBase + '/account';
+
+    function safeTarget(target) {
+      try {
+        const url = new URL(target || defaultReturn, window.location.origin);
+        if (url.origin === window.location.origin) {
+          // Dot segments are resolved by now, so /.//evil.example/ has
+          // become //evil.example/, which the browser reads as another host.
+          const local = url.pathname + url.search + url.hash;
+          return local.startsWith('//') ? defaultReturn : local;
+        }
+        if ((url.protocol === 'http:' || url.protocol === 'https:') && hostAllowedFor(url)) {
+          return url.href;
+        }
+        return defaultReturn;
+      } catch (e) {
+        return defaultReturn;
+      }
+    }
+
+    function returnTo() {
+      return safeTarget(referrerField ? referrerField.value : '');
+    }
+
+    // An account with TOTP also needs a code, whichever way it got this far.
+    // After a password, the second step may instead be a mailed PIN.
+    function askForCode(pending, step) {
+      hideMessages();
+      document.getElementById('sign-in-methods').hidden = true;
+      document.getElementById('code-pending').value = pending;
+      if (step === 'mail') {
+        document.getElementById('code-label').textContent = 'PIN from the message just sent to you';
+        document.getElementById('code-hint').hidden = true;
+      }
+      document.getElementById('code-form').hidden = false;
+      document.getElementById('code').focus();
+    }
+
+    // The second step the server asked for.  Adding a second factor is a page of
+    // its own, which the server draws for the step's token.
+    function askForStep(pending, step) {
+      if (step === 'enrol') {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = signetBase + '/login';
+        for (const [name, value] of [['pending', pending], ['referrer', referrerField ? referrerField.value : '']]) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = value;
+          form.appendChild(input);
+        }
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+      askForCode(pending, step);
+    }
+
+    // Handle password login form submission
+    if (loginForm) loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const email = emailInput.value;
+      const password = passwordInput.value;
+      const referrer = referrerField ? referrerField.value : '';
+
+      try {
+        const response = await fetch(signetBase + '/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: `email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
+            + `&referrer=${encodeURIComponent(referrer)}`
+        });
+
+        // The server answers JSON for this request; fall back to the text
+        // body so a proxy or error page never turns into a bogus
+        // "network error".
+        const type = response.headers.get('content-type') || '';
+        const data = type.includes('application/json')
+          ? await response.json()
+          : { success: false, error: (await response.text()).trim() };
+
+        if (data.pending) {
+          askForStep(data.pending, data.step || 'code');
+        } else if (data.success) {
+          window.location.href = safeTarget(data.redirect || returnTo());
+        } else {
+          showError(data.error || 'Login failed');
+        }
+      } catch (error) {
+        showError('Network error. Please try again.');
+      }
+    });
+
+    // Handle WebAuthn login
+    async function handleWebAuthnLogin() {
+      const email = emailInput ? emailInput.value : '';
+
+      if (!email) {
+        showError('Please enter your email address first.');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+
+      setLoading(true);
+      hideMessages();
+
+      try {
+        await WebAuthnUI.login(email,
+          // onSuccess
+          () => {
+            showSuccess('Login successful! Redirecting...');
+            setTimeout(() => {
+              window.location.href = returnTo();
+            }, 1000);
+          },
+          // onError
+          (error) => {
+            console.error('WebAuthn login error:', error);
+            showError(error.message || 'WebAuthn authentication failed');
+            setLoading(false);
+          }
+        );
+      } catch (error) {
+        console.error('WebAuthn error:', error);
+        showError(error.message || 'WebAuthn authentication failed');
+        setLoading(false);
+      }
+    }
+
+    // Handle email PIN form
+    const emailPinForm = document.getElementById('email-pin-form');
+    const emailStep = document.getElementById('email-step');
+    const pinStep = document.getElementById('pin-step');
+    const pinEmail = document.getElementById('pin-email');
+    const pinCode = document.getElementById('pin-code');
+    const sendPinButton = document.getElementById('send-pin-button');
+
+    if (emailPinForm) emailPinForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      if (emailStep.style.display !== 'none') {
+        // Send PIN step
+        const email = pinEmail.value;
+        if (!email) {
+          showError('Please enter your email address.');
+          pinEmail.focus();
+          return;
+        }
+
+        sendPinButton.disabled = true;
+        sendPinButton.textContent = 'Sending...';
+
+        try {
+          const response = await fetch(signetBase + '/email-pin/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email: email })
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showSuccess('PIN sent to your email!');
+            emailStep.style.display = 'none';
+            pinStep.style.display = 'block';
+            pinCode.focus();
+          } else {
+            showError(data.error || 'Failed to send PIN');
+            sendPinButton.disabled = false;
+            sendPinButton.textContent = 'Send PIN';
+          }
+        } catch (error) {
+          showError('Network error. Please try again.');
+          sendPinButton.disabled = false;
+          sendPinButton.textContent = 'Send PIN';
+        }
+      } else {
+        // Verify PIN step
+        const email = pinEmail.value;
+        const pin = pinCode.value;
+
+        if (!pin) {
+          showError('Please enter the PIN code.');
+          pinCode.focus();
+          return;
+        }
+
+        try {
+          const response = await fetch(signetBase + '/email-pin/verify', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email: email, pin: pin })
+          });
+
+          const data = await response.json();
+
+          if (data.pending) {
+            askForStep(data.pending, data.step || 'code');
+          } else if (data.success) {
+            showSuccess('Login successful! Redirecting...');
+            setTimeout(() => {
+              window.location.href = returnTo();
+            }, 1000);
+          } else {
+            showError(data.error || 'Invalid PIN');
+            pinCode.value = '';
+            pinCode.focus();
+          }
+        } catch (error) {
+          showError('Network error. Please try again.');
+        }
+      }
+    });
+
+    // Utility functions
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.add('visible');
+      successMessage.classList.remove('visible');
+    }
+
+    function showSuccess(message) {
+      successMessage.textContent = message;
+      successMessage.classList.add('visible');
+      errorMessage.classList.remove('visible');
+    }
+
+    function hideMessages() {
+      errorMessage.classList.remove('visible');
+      successMessage.classList.remove('visible');
+    }
+
+    function setLoading(loading) {
+      loadingDiv.classList.toggle('visible', loading);
+      if (webauthnButton) webauthnButton.disabled = loading;
+    }
+
+    // Check if WebAuthn is supported
+    if (webauthnButton && !window.PublicKeyCredential) {
+      webauthnButton.style.display = 'none';
+      // Do not leave a divider dangling between the remaining sections.
+      const divider = document.getElementById('divider-after-webauthn');
+      if (divider) divider.style.display = 'none';
+    } else if (webauthnButton && !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+      // Only show if platform authenticator is not available
+      // Users with both can use either
+    }
+  </script>
+</body>
+</html>
+{{end}}

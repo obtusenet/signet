@@ -1,0 +1,11 @@
+A change to your account
+========================
+
+Hello {{.Email}},
+
+{{.Change}}
+
+If this was you, there is nothing more to do. If it was not, contact your administrator now.
+
+---
+This email was sent by {{.AppName}}.

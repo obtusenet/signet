@@ -1,0 +1,41 @@
+#!/bin/ksh
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+
+daemon="${LOCALBASE}/bin/signet"
+daemon_user="_signet"
+daemon_flags="serve -config ${SYSCONFDIR}/signet/config.yaml"
+
+CHROOT=${LOCALSTATEDIR}/www/signet
+EXAMPLES=${LOCALBASE}/share/examples/signet/web
+
+. /etc/rc.d/rc.subr
+
+pexp="${daemon} ${daemon_flags}"
+rc_bg=YES
+rc_reload=YES
+
+rc_pre() {
+	install -d -o "$daemon_user" -g "$daemon_user" "$CHROOT"
+
+	# State left behind by an earlier installation may belong to another
+	# uid; take ownership of the runtime tree.
+	chown -R "${daemon_user}:${daemon_user}" "$CHROOT"
+
+	# Seed the runtime web tree from the packaged examples on first run, with
+	# the record that later lets an upgrade tell which files were edited.
+	for d in templates static; do
+		if [ ! -e "${CHROOT}/${d}" ]; then
+			/bin/sh "${EXAMPLES}/../install-web.sh" "${EXAMPLES}/${d}" \
+				"${CHROOT}/${d}" "${CHROOT}/.web-${d}.sha256" \
+				"${daemon_user}:${daemon_user}"
+		fi
+	done
+}
+
+# No rc_start override: signet writes to syslog (log_syslog: true) and the
+# framework's own start/stop bookkeeping needs the plain command form.
+# Redirecting stdout here makes rc.subr wait for the full daemon_timeout and
+# report "failed" even though the daemon stopped cleanly.
+
+rc_cmd $1

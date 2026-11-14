@@ -1,0 +1,61 @@
+#!/usr/bin/make -f
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+#
+# Builds from vendor/ alone, as the OpenBSD port does: no module is fetched.
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/buildflags.mk
+include /usr/share/dpkg/pkg-info.mk
+
+export PATH := /usr/lib/go-1.26/bin:$(PATH)
+export GOFLAGS = -mod=vendor -trimpath
+export GOPROXY = off
+export GOTOOLCHAIN = local
+export CGO_ENABLED = 1
+export CGO_CFLAGS = $(CFLAGS) $(CPPFLAGS)
+export CGO_LDFLAGS = $(LDFLAGS)
+export GOCACHE = $(CURDIR)/debian/.gocache
+export GOPATH = $(CURDIR)/debian/.gopath
+
+BUILD_TIME := $(shell date -u -d @$(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ)
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	go build -buildmode=pie -ldflags "-X main.buildTime=$(BUILD_TIME) -X main.defaultConfig=/etc/signet/config.yaml" \
+		-o debian/build/signet ./cmd/signet
+	# The unit is deploy/signet.service with this package's user and paths.
+	sed -e 's/^User=signet$$/User=_signet/' -e 's/^Group=signet$$/Group=_signet/' \
+		-e 's|^WorkingDirectory=.*|WorkingDirectory=/var/lib/signet|' \
+		-e 's|/opt/signet/signet|/usr/bin/signet|' \
+		-e 's|^ReadWritePaths=.*|ReadWritePaths=/var/lib/signet|' \
+		deploy/signet.service > debian/signet.service
+
+# A failing test stops the package being built.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	go test ./...
+endif
+
+override_dh_auto_install:
+	install -D -m 0755 debian/build/signet debian/signet/usr/bin/signet
+	install -D -m 0644 config/example.yaml debian/signet/usr/share/signet/config.yaml.example
+	install -D -m 0755 deploy/install-web.sh debian/signet/usr/share/signet/install-web.sh
+	mkdir -p debian/signet/usr/share/signet/web
+	cp -r web/templates web/static debian/signet/usr/share/signet/web/
+
+# Installed, not enabled or started: serve needs cookie_secret first.  An upgrade
+# does not stop it, and postinst restarts it if it is running; prerm stops it on
+# remove, which --no-start leaves out.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start --no-stop-on-upgrade
+
+# Go compresses its debug sections, which dwz cannot read.
+override_dh_dwz:
+
+override_dh_auto_clean:
+	rm -rf debian/build debian/.gocache debian/.gopath debian/signet.service

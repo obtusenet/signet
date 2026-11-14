@@ -1,0 +1,61 @@
+#!/bin/sh
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+
+# PROVIDE: signet
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+#
+# Add the following lines to /etc/rc.conf to enable signet:
+#
+# signet_enable (bool):	Set to YES to enable signet.
+#			Default: NO
+# signet_config (str):	The configuration file.
+#			Default: %%ETCDIR%%/config.yaml
+# signet_run_user (str):	The user signet runs as.
+#			Default: %%SIGNET_USER%%
+#
+# daemon(8) runs signet and starts it again if it stops; "reload" sends signet
+# SIGHUP, which reads the configuration and templates again.
+
+. /etc/rc.subr
+
+name=signet
+rcvar=signet_enable
+desc="Web sign-in server"
+
+load_rc_config ${name}
+
+: ${signet_enable:="NO"}
+: ${signet_config:="%%ETCDIR%%/config.yaml"}
+: ${signet_run_user:="%%SIGNET_USER%%"}
+
+# daemon(8) writes both after it becomes signet_run_user, so in a directory of its own.
+rundir="/var/run/${name}"
+pidfile="${rundir}/daemon.pid"
+child_pidfile="${rundir}/${name}.pid"
+procname="/usr/sbin/daemon"
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -p ${child_pidfile} -f -r -R 5 -S -T ${name} -u ${signet_run_user} -- %%PREFIX%%/bin/signet serve -config ${signet_config}"
+required_files="${signet_config}"
+
+start_precmd="${name}_prestart"
+extra_commands="reload"
+reload_cmd="${name}_reload"
+
+signet_prestart()
+{
+	install -d -o "${signet_run_user}" -m 0755 "${rundir}"
+}
+
+signet_reload()
+{
+	rc_pid=$(check_pidfile ${child_pidfile} %%PREFIX%%/bin/signet)
+	if [ -z "${rc_pid}" ]; then
+		_run_rc_notrunning
+		return 1
+	fi
+	kill -HUP ${rc_pid}
+}
+
+run_rc_command "$1"

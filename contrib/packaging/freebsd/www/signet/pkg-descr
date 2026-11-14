@@ -1,0 +1,4 @@
+Signet signs people in to web applications with a password, a security key
+(WebAuthn), a PIN sent by mail or a TOTP code, and tells a web server or an
+application who is signed in.  Accounts are kept in a CSV file and sessions
+in SQLite.

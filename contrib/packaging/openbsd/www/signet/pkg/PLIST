@@ -1,0 +1,59 @@
+@newgroup _signet:906
+@newuser _signet:906:_signet::Signet Auth:/var/www/signet:/sbin/nologin
+@rcscript ${RCDIR}/signet
+@bin bin/signet
+@man man/man1/signet.1
+@man man/man5/signet-config.yaml.5
+@man man/man5/signet-hooks.5
+@man man/man5/signet-template.5
+@man man/man7/signet-api.7
+share/doc/signet/
+share/doc/signet/LICENSE
+share/examples/signet/
+share/examples/signet/config.yaml
+@sample ${SYSCONFDIR}/signet/
+@mode 0640
+@group _signet
+@sample ${SYSCONFDIR}/signet/config.yaml
+@mode
+@group
+share/examples/signet/hooks/
+share/examples/signet/hooks/README.md
+share/examples/signet/hooks/claims-hook.py
+share/examples/signet/hooks/claims-hook.sh
+share/examples/signet/hooks/test-hooks.sh
+share/examples/signet/install-web.sh
+share/examples/signet/web-servers/
+share/examples/signet/web-servers/README.md
+share/examples/signet/web-servers/caddy/
+share/examples/signet/web-servers/caddy/Caddyfile-port
+share/examples/signet/web-servers/caddy/Caddyfile-socket
+share/examples/signet/web-servers/nginx/
+share/examples/signet/web-servers/nginx/signet-port.conf
+share/examples/signet/web-servers/nginx/signet-fcgi.conf
+share/examples/signet/web-servers/openbsd-httpd/
+share/examples/signet/web-servers/openbsd-httpd/signet-port.conf
+share/examples/signet/web-servers/openbsd-httpd/signet-fcgi.conf
+share/examples/signet/web/
+share/examples/signet/web/static/
+share/examples/signet/web/static/js/
+share/examples/signet/web/static/js/webauthn.js
+share/examples/signet/web/templates/
+share/examples/signet/web/templates/account.html
+share/examples/signet/web/templates/email/
+share/examples/signet/web/templates/email/account-change.html
+share/examples/signet/web/templates/email/account-change.txt
+share/examples/signet/web/templates/email/account-exists.html
+share/examples/signet/web/templates/email/account-exists.txt
+share/examples/signet/web/templates/email/password-changed.html
+share/examples/signet/web/templates/email/password-changed.txt
+share/examples/signet/web/templates/email/pin.html
+share/examples/signet/web/templates/email/pin.txt
+share/examples/signet/web/templates/email/recover.html
+share/examples/signet/web/templates/email/recover.txt
+share/examples/signet/web/templates/email/register.html
+share/examples/signet/web/templates/email/register.txt
+share/examples/signet/web/templates/login.html
+share/examples/signet/web/templates/recover.html
+share/examples/signet/web/templates/register.html
+share/examples/signet/web/templates/webauthn.html

@@ -1,0 +1,309 @@
+{{define "register"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signet - Create Account</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --text: #333333;
+      --heading: #1a1a2e;
+      --label: #444444;
+      --muted: #666666;
+      --border: #e1e5eb;
+      --input-bg: #ffffff;
+      --primary: #4a90e2;
+      --primary-hover: #357abd;
+      --error-bg: #ffeeee;
+      --error-fg: #cc3333;
+      --error-border: #ffcccc;
+      --success-bg: #eeffee;
+      --success-fg: #33aa33;
+      --success-border: #ccffcc;
+      --shadow: rgba(0, 0, 0, 0.08);
+      --focus-ring: rgba(74, 144, 226, 0.15);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12151a;
+        --surface: #1b1f27;
+        --text: #d7dce5;
+        --heading: #eef2f8;
+        --label: #c2c9d4;
+        --muted: #9aa4b2;
+        --border: #2f3742;
+        --input-bg: #141821;
+        --primary: #5aa0f0;
+        --primary-hover: #74b0f5;
+        --error-bg: #3a1f22;
+        --error-fg: #ffb4b4;
+        --error-border: #5d2b30;
+        --success-bg: #16301f;
+        --success-fg: #9fe0a8;
+        --success-border: #245c33;
+        --shadow: rgba(0, 0, 0, 0.5);
+        --focus-ring: rgba(90, 160, 240, 0.3);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 60px auto;
+      padding: 40px;
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: 0 2px 20px var(--shadow);
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--heading);
+      margin-bottom: 12px;
+      font-size: 26px;
+      font-weight: 600;
+    }
+
+    p.intro {
+      text-align: center;
+      color: var(--muted);
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--label);
+    }
+
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 15px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--focus-ring);
+    }
+
+    button {
+      width: 100%;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--primary);
+      color: #ffffff;
+      transition: background 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .message {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .message.error {
+      background: var(--error-bg);
+      color: var(--error-fg);
+      border: 1px solid var(--error-border);
+    }
+
+    .message.info {
+      background: var(--success-bg);
+      color: var(--success-fg);
+      border: 1px solid var(--success-border);
+    }
+
+    .links {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .links a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .links a:hover {
+      text-decoration: underline;
+    }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Create Account</h1>
+
+    {{if not .RegistrationEnabled}}
+    <p class="intro">Creating an account is not available on this installation.</p>
+    {{else if .Done}}
+    {{else if .Token}}
+    <p class="intro">Choose a password for your new account.</p>
+    {{else if .VerificationRequired}}
+    <p class="intro" id="intro">Enter your address and we will send you a link to finish.</p>
+    {{else}}
+    <p class="intro" id="intro">Enter your address and choose a password.</p>
+    {{end}}
+
+    {{if .Error}}
+    <div class="message error">{{.Error}}</div>
+    {{end}}
+    <div class="message error" id="link-error" hidden></div>
+
+    {{if .Message}}
+    <div class="message info">{{.Message}}</div>
+    {{end}}
+
+    {{if and .RegistrationEnabled (not .Done)}}
+    <form method="POST" action="{{basePath}}/register" id="request-form"{{if .Token}} hidden{{end}}>
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email" autocomplete="email"
+               value="{{.Email}}" placeholder="you@example.com">
+      </div>
+      {{if not .VerificationRequired}}
+      <div class="form-group">
+        <label for="direct-password">Password</label>
+        <input type="password" id="direct-password" name="password" minlength="8" autocomplete="new-password">
+      </div>
+      <button type="submit">Create Account</button>
+      {{else}}
+      <button type="submit">Send Link</button>
+      {{end}}
+    </form>
+
+    <form method="POST" action="{{basePath}}/register" id="reset-form"{{if not .Token}} hidden{{end}}>
+      <input type="hidden" id="token" name="token" value="{{.Token}}">
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" minlength="8" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="confirm">Password Again</label>
+        <input type="password" id="confirm" autocomplete="new-password">
+      </div>
+      <button type="submit">Create Account</button>
+    </form>
+    {{end}}
+
+    <div class="links">
+      <a href="{{basePath}}/login">Back to sign in</a>
+    </div>
+  </div>
+
+  <script>
+    // Where this instance's routes are: "" at the root, else its base_path.
+    const signetBase = {{basePath}};
+    // A link from the mail carries its token in the fragment, which reaches no
+    // access log.  Take it out of the address bar and history at once, and refuse
+    // a dead link before asking anyone to choose a password.
+    (function () {
+      const requestForm = document.getElementById('request-form');
+      const resetForm = document.getElementById('reset-form');
+      if (!requestForm || !resetForm) return;
+      const linkError = document.getElementById('link-error');
+      const showError = (text) => {
+        linkError.textContent = text;
+        linkError.hidden = false;
+      };
+
+      resetForm.addEventListener('submit', (event) => {
+        const password = document.getElementById('password').value;
+        if (password === '') {
+          event.preventDefault();
+          showError('Enter a new password.');
+        } else if (password !== document.getElementById('confirm').value) {
+          event.preventDefault();
+          showError('The two passwords do not match.');
+        }
+      });
+
+      // A link pasted into a tab already on this page changes only the fragment,
+      // and the page does not load again, so a change of fragment counts too.
+      window.addEventListener('hashchange', checkLink);
+      checkLink();
+
+      function checkLink() {
+        const match = /^#token=([A-Za-z0-9_-]+)$/.exec(window.location.hash);
+        if (!match) return;
+        const token = match[1];
+        window.history.replaceState(null, '', window.location.pathname);
+
+        const intro = document.getElementById('intro');
+        requestForm.hidden = true;
+        resetForm.hidden = true;
+        linkError.hidden = true;
+        if (intro) intro.textContent = 'Checking this link...';
+        const refuse = (text) => {
+          requestForm.hidden = false;
+          if (intro) intro.textContent = 'Enter your address and we will send you a new link.';
+          showError(text);
+        };
+        fetch(signetBase + '/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+          body: new URLSearchParams({ token }),
+        }).then(async (reply) => {
+          const body = await reply.json();
+          if (!reply.ok) {
+            refuse(body.error || 'This link cannot be used.');
+            return;
+          }
+          document.getElementById('token').value = token;
+          if (intro) intro.textContent = 'Choose a password for your new account.';
+          resetForm.hidden = false;
+        }).catch(() => refuse('The link could not be checked. Try opening it again.'));
+      }
+    })();
+  </script>
+</body>
+</html>
+{{end}}

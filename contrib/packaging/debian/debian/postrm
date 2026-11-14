@@ -1,0 +1,18 @@
+#!/bin/sh
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+set -e
+
+#DEBHELPER#
+
+if [ "$1" = purge ]; then
+	rm -f /etc/signet/config.yaml /etc/signet/.web-templates.sha256 /etc/signet/.web-static.sha256
+	rm -rf /etc/signet/templates /etc/signet/static
+	rmdir /etc/signet 2> /dev/null || true
+	# The accounts, keys and sessions are not removed.
+	if [ -d /var/lib/signet ]; then
+		echo "signet: /var/lib/signet is kept: it holds the accounts and keys."
+	fi
+fi
+
+exit 0

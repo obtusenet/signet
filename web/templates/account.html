@@ -1,0 +1,758 @@
+{{define "account"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signet - Your Account</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --text: #333333;
+      --heading: #1a1a2e;
+      --label: #444444;
+      --muted: #666666;
+      --border: #e1e5eb;
+      --input-bg: #ffffff;
+      --primary: #4a90e2;
+      --primary-hover: #357abd;
+      --error-bg: #ffeeee;
+      --error-fg: #cc3333;
+      --error-border: #ffcccc;
+      --success-bg: #eeffee;
+      --success-fg: #33aa33;
+      --success-border: #ccffcc;
+      --shadow: rgba(0, 0, 0, 0.08);
+      --focus-ring: rgba(74, 144, 226, 0.15);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12151a;
+        --surface: #1b1f27;
+        --text: #d7dce5;
+        --heading: #eef2f8;
+        --label: #c2c9d4;
+        --muted: #9aa4b2;
+        --border: #2f3742;
+        --input-bg: #141821;
+        --primary: #5aa0f0;
+        --primary-hover: #74b0f5;
+        --error-bg: #3a1f22;
+        --error-fg: #ffb4b4;
+        --error-border: #5d2b30;
+        --success-bg: #16301f;
+        --success-fg: #9fe0a8;
+        --success-border: #245c33;
+        --shadow: rgba(0, 0, 0, 0.5);
+        --focus-ring: rgba(90, 160, 240, 0.3);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    main {
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px var(--shadow);
+      padding: 32px;
+    }
+
+    h1 {
+      color: var(--heading);
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    #account {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+      overflow-wrap: anywhere;
+    }
+
+    .message {
+      border: 1px solid;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      padding: 12px;
+    }
+
+    .message.error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: var(--error-fg);
+    }
+
+    .message.success {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: var(--success-fg);
+    }
+
+    ul {
+      list-style: none;
+      margin-bottom: 24px;
+    }
+
+    li {
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 12px 0;
+    }
+
+    li span {
+      overflow-wrap: anywhere;
+    }
+
+    li small {
+      color: var(--muted);
+      display: block;
+      margin-top: 2px;
+    }
+
+    label {
+      color: var(--label);
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    input {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 16px;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      width: 100%;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--focus-ring);
+      outline: none;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      padding: 10px 16px;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+
+    #add {
+      background: var(--primary);
+      color: #ffffff;
+      width: 100%;
+    }
+
+    #add:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .remove {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--error-fg);
+      flex-shrink: 0;
+      font-size: 13px;
+      padding: 6px 10px;
+    }
+
+    nav {
+      font-size: 14px;
+      margin-top: 24px;
+      text-align: center;
+    }
+
+    a {
+      color: var(--primary);
+    }
+
+    dialog {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px var(--shadow);
+      color: var(--text);
+      margin: auto;
+      max-width: calc(100vw - 32px);
+      padding: 24px;
+      width: 420px;
+    }
+
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    dialog h2 {
+      color: var(--heading);
+      font-size: 18px;
+      margin-bottom: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    dialog p {
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    #remove-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    #remove-confirm {
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
+      color: var(--error-fg);
+    }
+
+    .actions button:focus-visible {
+      box-shadow: 0 0 0 3px var(--focus-ring);
+      outline: 1px solid var(--primary);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+    section { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
+    section h2 { margin: 0 0 12px; font-size: 18px; color: var(--heading); }
+    section label { display: block; margin-top: 12px; }
+    .avatar { display: block; width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); margin-bottom: 12px; }
+    .profile { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+    .profile .avatar { margin: 0; flex: none; }
+    .profile p { margin: 0 0 4px; }
+    .avatar-buttons { display: flex; gap: 12px; flex-wrap: wrap; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Your account</h1>
+    {{if .AvatarsEnabled}}
+    <div class="profile">
+      <img id="avatar-image" class="avatar" alt="Your picture" width="96" height="96" src="{{if .Avatar}}{{.Avatar}}{{else}}{{.Identicon}}{{end}}" data-identicon="{{.Identicon}}">
+      <div>
+        <p>Signed in as {{.Email}}</p>
+        {{if .Fresh}}<a href="#" id="avatar-edit">Edit</a>{{end}}
+      </div>
+    </div>
+    {{else}}
+    <p>Signed in as {{.Email}}</p>
+    {{end}}
+    <div id="message" class="message" role="status" hidden></div>
+
+    {{if not .Fresh}}
+    <div class="message error" id="stale">
+      To change anything here, <a href="{{basePath}}/login?referrer={{basePath}}%2Faccount">sign in again</a>. You signed in a while ago.
+    </div>
+    {{end}}
+
+    {{if and .AvatarsEnabled .Fresh}}
+    <section id="avatar-section" hidden>
+      <h2>Picture</h2>
+      <input id="avatar-file" type="file" accept="image/*" hidden>
+      <div class="avatar-buttons">
+        <button id="avatar-choose" type="button">Choose image</button>
+        <button id="avatar-remove" class="remove" type="button"{{if not .Avatar}} hidden{{end}}>Remove picture</button>
+      </div>
+      <div id="avatar-preview-box" hidden>
+        <canvas id="avatar-preview" class="avatar" width="{{.AvatarSize}}" height="{{.AvatarSize}}"></canvas>
+        <div class="avatar-buttons">
+          <button id="avatar-save" type="button">Save picture</button>
+          <button id="avatar-cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </section>
+    {{end}}
+
+    {{if .PasswordEnabled}}
+    <section id="password-section">
+      <h2>Password</h2>
+      {{if .Fresh}}
+      <form id="password-form">
+        {{if .HasPassword}}
+        <label for="current">Current password</label>
+        <input id="current" type="password" autocomplete="current-password">
+        {{else}}
+        <p>This account has no password yet. You can set one here.</p>
+        {{end}}
+        <label for="new">New password</label>
+        <input id="new" type="password" minlength="8" autocomplete="new-password">
+        <label for="confirm">New password again</label>
+        <input id="confirm" type="password" autocomplete="new-password">
+        <button type="submit">Change password</button>
+      </form>
+      {{end}}
+    </section>
+    {{end}}
+
+    {{if .WebAuthnEnabled}}
+    <section id="keys-section">
+      <h2>Passkeys and security keys</h2>
+      <ul id="keys" hidden></ul>
+      {{if .Fresh}}
+      <form id="enroll">
+        <label for="label">Name for the new key</label>
+        <input id="label" maxlength="64" placeholder="My security key" autocomplete="off">
+        <button id="add" type="submit">Add key</button>
+      </form>
+      {{end}}
+    </section>
+    {{end}}
+
+    {{if .TOTPEnabled}}
+    <section id="totp-section">
+      <h2>Authenticator apps (TOTP)</h2>
+      <p>With a key here, signing in with a password or an emailed PIN also asks for a code from the app.</p>
+      <ul id="totp-keys"{{if not .TOTPKeys}} hidden{{end}}>
+        {{range .TOTPKeys}}
+        <li data-id="{{.ID}}" data-label="{{.Label}}">
+          <span>{{.Label}}<small>Added {{.CreatedAt.Format "2006-01-02"}}</small></span>
+          {{if $.Fresh}}<button class="remove totp-remove" type="button">Remove</button>{{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{if .TOTPKeys}}
+      <p id="recovery-left">{{.RecoveryLeft}} recovery codes left.</p>
+      {{end}}
+      {{if .Fresh}}
+      <div id="recovery-codes" hidden>
+        <p><strong>Save these recovery codes now. They are shown only once.</strong> Each one signs in once in place of a code, if you lose your authenticator.</p>
+        <pre id="recovery-list"></pre>
+        <button id="recovery-done" type="button">I have saved them</button>
+      </div>
+      {{if lt (len .TOTPKeys) .MaxTOTPKeys}}
+      <form id="totp-begin">
+        <label for="totp-label">Name for the new key</label>
+        <input id="totp-label" maxlength="64" placeholder="My phone" autocomplete="off">
+        <button type="submit">Add authenticator</button>
+      </form>
+      {{end}}
+      <form id="totp-finish" hidden>
+        <p>Scan this with your authenticator app, or type the secret in.</p>
+        <img id="totp-qr" alt="QR code for your authenticator app" width="240" height="240">
+        <p><code id="totp-secret"></code></p>
+        <label for="totp-code">Code from the app</label>
+        <input id="totp-code" autocomplete="one-time-code" inputmode="numeric" placeholder="123456">
+        <button type="submit">Save key</button>
+      </form>
+      {{if .TOTPKeys}}
+      <button id="totp-new-codes" type="button">Replace recovery codes</button>
+      {{end}}
+      {{end}}
+    </section>
+    {{end}}
+
+    <nav><a href="{{basePath}}/logout">Sign out</a></nav>
+  </main>
+
+  <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-text">
+    <h2 id="remove-title"></h2>
+    <div id="remove-text"></div>
+    <div class="actions">
+      <button id="remove-cancel" type="button" autofocus>Cancel</button>
+      <button id="remove-confirm" type="button">Remove</button>
+    </div>
+  </dialog>
+  {{if .WebAuthnEnabled}}
+  <script src="{{basePath}}/static/js/webauthn.js" data-base-path="{{basePath}}"></script>
+  {{end}}
+  <script>
+    // Where this instance's routes are: "" at the root, else its base_path.
+    const signetBase = {{basePath}};
+    const message = document.getElementById('message');
+    const signInLink = signetBase + '/login?referrer=' + encodeURIComponent(signetBase + '/account');
+
+    function show(kind, text) {
+      message.className = 'message ' + kind;
+      message.textContent = text;
+      message.hidden = false;
+    }
+
+    // A stale sign-in answers 403: say so, and offer the way back.
+    function showFailure(error, status) {
+      show('error', error);
+      if (status === 403) {
+        const again = document.createElement('a');
+        again.href = signInLink;
+        again.textContent = ' Sign in again.';
+        message.append(again);
+      }
+    }
+
+    async function change(body) {
+      const reply = await fetch(signetBase + '/account', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await reply.json();
+      return { ok: reply.ok, status: reply.status, data };
+    }
+
+    // Answers true only for the Remove button: Cancel and Escape both decline.
+    const dialog = document.getElementById('remove-dialog');
+    function confirmRemoval(title, lines) {
+      document.getElementById('remove-title').textContent = title;
+      document.getElementById('remove-text').replaceChildren(...lines.map((line) => {
+        const paragraph = document.createElement('p');
+        paragraph.textContent = line;
+        return paragraph;
+      }));
+      return new Promise((resolve) => {
+        dialog.returnValue = '';
+        dialog.addEventListener('close', () => resolve(dialog.returnValue === 'remove'), { once: true });
+        dialog.showModal();
+      });
+    }
+    document.getElementById('remove-cancel').addEventListener('click', () => dialog.close('cancel'));
+    document.getElementById('remove-confirm').addEventListener('click', () => dialog.close('remove'));
+
+    const passwordForm = document.getElementById('password-form');
+    if (passwordForm) {
+      const field = (id) => document.getElementById(id);
+      passwordForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (field('new').value !== field('confirm').value) {
+          show('error', 'The two new passwords do not match.');
+          return;
+        }
+        try {
+          const { ok, status, data } = await change({
+            action: 'password',
+            current: field('current') ? field('current').value : '',
+            new: field('new').value,
+          });
+          if (!ok) {
+            showFailure(data.error, status);
+            return;
+          }
+          for (const id of ['current', 'new', 'confirm']) {
+            if (field(id)) field(id).value = '';
+          }
+          show('success', data.message);
+        } catch (error) {
+          show('error', 'The password could not be changed. Try again.');
+        }
+      });
+    }
+
+    const keys = document.getElementById('keys');
+    if (keys && !window.PublicKeyCredential) {
+      keys.hidden = true;
+      const enroll = document.getElementById('enroll');
+      if (enroll) enroll.hidden = true;
+      const note = document.createElement('p');
+      note.textContent = 'This browser does not support security keys here. They need a secure (HTTPS) page.';
+      document.getElementById('keys-section').append(note);
+    } else if (keys) {
+      const fresh = {{.Fresh}};
+
+      // Everything from the server goes in through textContent.
+      function renderKeys(credentials) {
+        keys.replaceChildren();
+        for (const credential of credentials) {
+          const item = document.createElement('li');
+          const details = document.createElement('span');
+          details.textContent = credential.label;
+          const added = document.createElement('small');
+          added.textContent = 'Added ' + new Date(credential.created_at).toLocaleDateString();
+          details.append(added);
+          item.append(details);
+          if (fresh) {
+            const remove = document.createElement('button');
+            remove.className = 'remove';
+            remove.type = 'button';
+            remove.textContent = 'Remove';
+            remove.addEventListener('click', () => removeKey(credential, credentials.length === 1));
+            item.append(remove);
+          }
+          keys.append(item);
+        }
+        keys.hidden = credentials.length === 0;
+      }
+
+      async function refresh() {
+        const { credentials } = await WebAuthn.listCredentials();
+        renderKeys(credentials);
+      }
+
+      async function removeKey(credential, onlyKey) {
+        const lines = [
+          'It will no longer sign in to this account.',
+          'This signs the account out everywhere, including here, even if you did not sign in with this key.',
+        ];
+        if (onlyKey) {
+          lines.push('This is your only key. Without a password, you will need an administrator to get back in.');
+        }
+        if (!await confirmRemoval('Remove "' + credential.label + '"?', lines)) return;
+        try {
+          await WebAuthn.deleteCredential(credential.id);
+        } catch (error) {
+          showFailure(error.message, error.status);
+          refresh().catch(() => {});
+          return;
+        }
+        // Every session of the account has ended, this one with it.
+        window.location.href = signInLink;
+      }
+
+      const enroll = document.getElementById('enroll');
+      if (enroll) {
+        const addButton = document.getElementById('add');
+        enroll.addEventListener('submit', (event) => {
+          event.preventDefault();
+          addButton.disabled = true;
+          message.hidden = true;
+          WebAuthnUI.register(
+            document.getElementById('label').value,
+            null,
+            async () => {
+              addButton.disabled = false;
+              document.getElementById('label').value = '';
+              show('success', 'Key added.');
+              await refresh();
+            },
+            (error) => {
+              addButton.disabled = false;
+              showFailure(error.message || 'The key could not be added.', error.status);
+            }
+          );
+        });
+      }
+      refresh().catch((error) => showFailure(error.message, error.status));
+    }
+
+    // Recovery codes appear once, and nothing else on the page may replace them
+    // until the person says they have them.
+    function showRecoveryCodes(codes) {
+      document.getElementById('recovery-list').textContent = codes.join('\n');
+      document.getElementById('recovery-codes').hidden = false;
+    }
+    const recoveryDone = document.getElementById('recovery-done');
+    if (recoveryDone) recoveryDone.addEventListener('click', () => window.location.reload());
+
+    const totpBegin = document.getElementById('totp-begin');
+    const totpFinish = document.getElementById('totp-finish');
+    if (totpBegin) {
+      totpBegin.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        try {
+          const { ok, status, data } = await change({ action: 'totp-begin', label: document.getElementById('totp-label').value });
+          if (!ok) {
+            showFailure(data.error, status);
+            return;
+          }
+          document.getElementById('totp-qr').src = data.qr;
+          document.getElementById('totp-secret').textContent = data.secret;
+          totpBegin.hidden = true;
+          totpFinish.hidden = false;
+          message.hidden = true;
+        } catch (error) {
+          show('error', 'The key could not be started. Try again.');
+        }
+      });
+    }
+    if (totpFinish) {
+      totpFinish.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        try {
+          const { ok, status, data } = await change({ action: 'totp-finish', code: document.getElementById('totp-code').value });
+          if (!ok) {
+            showFailure(data.error, status);
+            return;
+          }
+          totpFinish.hidden = true;
+          if (data.recovery_codes) {
+            show('success', 'Key saved.');
+            showRecoveryCodes(data.recovery_codes);
+          } else {
+            window.location.reload();
+          }
+        } catch (error) {
+          show('error', 'The key could not be saved. Try again.');
+        }
+      });
+    }
+    for (const button of document.querySelectorAll('.totp-remove')) {
+      button.addEventListener('click', async () => {
+        const item = button.closest('li');
+        if (!await confirmRemoval('Remove "' + item.dataset.label + '"?', [
+          'Its codes will no longer work for this account.',
+          'This signs the account out everywhere else.',
+        ])) return;
+        try {
+          const { ok, status, data } = await change({ action: 'totp-remove', id: item.dataset.id });
+          if (!ok) {
+            showFailure(data.error, status);
+            return;
+          }
+          window.location.reload();
+        } catch (error) {
+          show('error', 'The key could not be removed. Try again.');
+        }
+      });
+    }
+    const newCodes = document.getElementById('totp-new-codes');
+    if (newCodes) {
+      newCodes.addEventListener('click', async () => {
+        if (!await confirmRemoval('Replace your recovery codes?', ['The ones you have now will stop working.'])) return;
+        try {
+          const { ok, status, data } = await change({ action: 'totp-codes' });
+          if (!ok) {
+            showFailure(data.error, status);
+            return;
+          }
+          show('success', 'New recovery codes.');
+          showRecoveryCodes(data.recovery_codes);
+        } catch (error) {
+          show('error', 'The codes could not be replaced. Try again.');
+        }
+      });
+    }
+
+    // The picture is cropped and scaled here, so the upload is small; the server
+    // checks its size and encodes it again.  PNG unless that is large (a photo),
+    // then JPEG, stepping the quality down until it fits the request limit.
+    const avatarFile = document.getElementById('avatar-file');
+    if (avatarFile) {
+      const avatarImage = document.getElementById('avatar-image');
+      const avatarSection = document.getElementById('avatar-section');
+      const avatarRemove = document.getElementById('avatar-remove');
+      const previewBox = document.getElementById('avatar-preview-box');
+      const preview = document.getElementById('avatar-preview');
+      const maxUpload = 90 * 1024;
+
+      const blobOf = (type, quality) => new Promise((resolve) => preview.toBlob(resolve, type, quality));
+      async function encodePreview() {
+        let blob = await blobOf('image/png');
+        for (const quality of [0.85, 0.7, 0.5]) {
+          if (blob && blob.size <= maxUpload) break;
+          blob = await blobOf('image/jpeg', quality);
+        }
+        if (!blob || blob.size > maxUpload) return null;
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(binary);
+      }
+      // With no picture of its own, the account shows its pattern.
+      function showPicture(src) {
+        avatarImage.src = src || avatarImage.dataset.identicon;
+        avatarRemove.hidden = !src;
+        previewBox.hidden = true;
+        avatarSection.hidden = true;
+        avatarFile.value = '';
+      }
+
+      document.getElementById('avatar-edit').addEventListener('click', (event) => {
+        event.preventDefault();
+        avatarSection.hidden = !avatarSection.hidden;
+      });
+
+      document.getElementById('avatar-choose').addEventListener('click', () => avatarFile.click());
+      avatarFile.addEventListener('change', async () => {
+        const file = avatarFile.files && avatarFile.files[0];
+        if (!file) return;
+        let bitmap;
+        try {
+          bitmap = await createImageBitmap(file);
+        } catch (error) {
+          show('error', 'That file is not an image this browser can read.');
+          return;
+        }
+        const side = Math.min(bitmap.width, bitmap.height);
+        const context = preview.getContext('2d');
+        context.imageSmoothingQuality = 'high';
+        context.clearRect(0, 0, preview.width, preview.height);
+        context.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side,
+          0, 0, preview.width, preview.height);
+        if (bitmap.close) bitmap.close();
+        previewBox.hidden = false;
+      });
+      document.getElementById('avatar-cancel').addEventListener('click', () => {
+        previewBox.hidden = true;
+        avatarFile.value = '';
+      });
+      document.getElementById('avatar-save').addEventListener('click', async () => {
+        try {
+          const image = await encodePreview();
+          if (!image) {
+            show('error', 'That picture is too detailed to save. Try another.');
+            return;
+          }
+          const { ok, status, data } = await change({ action: 'avatar-set', image });
+          if (!ok) {
+            showFailure(data.error, status);
+            return;
+          }
+          showPicture(data.avatar);
+          show('success', data.message);
+        } catch (error) {
+          show('error', 'The picture could not be saved. Try again.');
+        }
+      });
+      avatarRemove.addEventListener('click', async () => {
+        if (!await confirmRemoval('Remove your picture?', ['Applications will show no picture for you.'])) return;
+        try {
+          const { ok, status, data } = await change({ action: 'avatar-remove' });
+          if (!ok) {
+            showFailure(data.error, status);
+            return;
+          }
+          showPicture('');
+          show('success', data.message);
+        } catch (error) {
+          show('error', 'The picture could not be removed. Try again.');
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+{{end}}

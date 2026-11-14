@@ -1,0 +1,49 @@
+(signet) {
+	@signet path /login /logout /session /recover /register /account
+	handle @signet {
+		reverse_proxy unix//var/www/signet/signet.sock
+	}
+	handle /webauthn/* {
+		reverse_proxy unix//var/www/signet/signet.sock
+	}
+	handle /email-pin/* {
+		reverse_proxy unix//var/www/signet/signet.sock
+	}
+	handle /avatar/* {
+		reverse_proxy unix//var/www/signet/signet.sock
+	}
+	handle /static/js/webauthn.js {
+		reverse_proxy unix//var/www/signet/signet.sock
+	}
+}
+
+# signet variant: listen: "/var/www/signet/signet.sock"  (HTTP over a unix
+# socket; socket_mode must let the Caddy user connect — see signet-config.
+# yaml(5).)  Caddy speaks FastCGI only as a server, not as a client, so
+# the socket variant for Caddy is plain HTTP over the socket.
+#
+# http:// is plain HTTP, which browsers will not send signet's cookie over
+# unless cookie_secure is false.  Drop the http:// and Caddy terminates TLS.
+#
+# unix//path  — two slashes, no colon — is the upstream syntax Caddy v2
+# accepts; "unix:/path" compiles but fails at runtime with "unknown
+# network".
+
+http://app.example.com {
+	import signet
+
+	handle {
+		forward_auth unix//var/www/signet/signet.sock {
+			uri /session
+			copy_headers Remote-User Remote-Email Remote-Avatar
+			@unauthenticated status 401
+			handle_response @unauthenticated {
+				redir * /login?referrer={uri} 302
+			}
+		}
+		reverse_proxy 127.0.0.1:8080 {
+			header_up X-Forwarded-User {http.request.header.Remote-User}
+			header_up X-Forwarded-Email {http.request.header.Remote-Email}
+		}
+	}
+}

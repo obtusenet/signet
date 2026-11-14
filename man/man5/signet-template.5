@@ -1,0 +1,469 @@
+.\"-
+.\" Copyright (c) 2026 Obtuse Networking LLC
+.\" SPDX-License-Identifier: MIT
+.\" $OpenBSD$
+.\"
+.Dd $Mdocdate: October 23 2026 $
+.Dt SIGNET-TEMPLATE 5
+.Os
+.Sh NAME
+.Nm signet-template
+.Nd signet HTML template files
+.Sh DESCRIPTION
+.Xr signet 1
+renders its pages from files in the directory named by
+.Va templates_dir
+in
+.Xr signet-config.yaml 5 ,
+by default
+.Pa /etc/signet/templates
+on
+.Ox
+and
+.Pa /var/www/signet/templates
+in the packaged configuration.
+.Pp
+Templates are parsed once at startup with the semantics of Go's
+.Li html/template
+package: all files matching
+.Pa *.html
+in that directory are loaded, and their contents are HTML-escaped where they
+appear as values.
+Changes on disk are picked up on the next start of the service.
+.Pp
+The directory shipped with the package is
+.Pa /usr/local/share/examples/signet/web/templates ;
+the service copies it into the runtime directory on first start, after which
+the runtime copy is the one that is used and may be edited freely.
+.Sh FILES
+.Bl -tag -width Ds
+.It Pa login.html
+The login page, served for
+.Cm GET /login .
+.It Pa webauthn.html
+The security-key page at
+.Pa /webauthn/keys .
+It receives no variables: its script calls
+.Pa /webauthn/credentials
+and reads any invite from the URL fragment.
+.It Pa recover.html
+The password recovery page, served for
+.Cm GET /recover .
+.It Pa register.html
+The registration page, served for
+.Cm GET /register .
+.It Pa account.html
+The account page, served for
+.Cm GET /account
+to a signed-in user.
+It receives
+.Va .Email ,
+.Va .Fresh ,
+which says whether the sign-in is recent enough to change anything,
+.Va .PasswordEnabled ,
+.Va .HasPassword ,
+.Va .WebAuthnEnabled ,
+.Va .TOTPEnabled ,
+.Va .TOTPKeys ,
+each with
+.Va .ID ,
+.Va .Label
+and
+.Va .CreatedAt ,
+.Va .RecoveryLeft ,
+.Va .MaxTOTPKeys ,
+.Va .AvatarsEnabled ,
+.Va .Avatar ,
+the path of the account's picture or empty,
+.Va .Identicon ,
+a pattern drawn from the address as a
+.Li data\&:
+URL, shown when there is no picture, and
+.Va .AvatarSize .
+.It Pa email/account-change.html , email/account-change.txt
+The notice sent when an account changes.
+It receives
+.Va .Email ,
+.Va .Change ,
+which says what happened, and
+.Va .AppName .
+.It Pa email/pin.html , email/pin.txt
+The HTML and plain-text bodies of the email PIN message.
+They are separate from the page templates and use their own variable set.
+.It Pa email/recover.html , email/recover.txt
+The message with a recovery link.
+.It Pa email/password-changed.html , email/password-changed.txt
+The notice sent after a recovery link changes a password.
+.It Pa email/register.html , email/register.txt
+The message with a registration link.
+.It Pa email/account-exists.html , email/account-exists.txt
+The notice sent when someone tries to register an address that has an account.
+.El
+.Sh PAGE TEMPLATES
+A page template may be written in either of two styles.
+Either it is a standalone document named after its file
+.Pq Pa login.html ,
+or it wraps the markup in a named definition:
+.Bd -literal -offset indent
+{{define "login"}}
+<!DOCTYPE html>
+\&...
+{{end}}
+.Ed
+.Pp
+Both work.
+When the definition exists it is preferred, because
+.Li html/template
+registers the file name as an empty wrapper in that case.
+.Ss Paths
+Every page template may call
+.Li basePath ,
+which gives the instance's
+.Va base_path
+.Po see
+.Xr signet-config.yaml 5
+.Pc :
+empty at the root, else like
+.Dq /comments-auth .
+Write each address of this instance with it, so the page works under a base:
+.Bd -literal -offset indent
+<form method="POST" action="{{basePath}}/login">
+<script src="{{basePath}}/static/js/webauthn.js"
+        data-base-path="{{basePath}}"></script>
+<script>const signetBase = {{basePath}};</script>
+.Ed
+.Pp
+Inside a script it gives a quoted string.
+.Pa webauthn.js
+reads the base from its tag's
+.Li data-base-path ,
+and calls the server there.
+A page edited before 0.13.25 names its addresses from the root, which is still
+right for an instance without a base.
+.Sh LOGIN TEMPLATE VARIABLES
+The following fields are available inside
+.Pa login.html :
+.Bl -tag -width Ds
+.It Va .AllowRegistration
+Boolean.
+True when
+.Va self_registration
+is
+.Dq enabled
+in the configuration.
+.It Va .PasswordEnabled
+Boolean.
+True when password authentication is available.
+.It Va .WebAuthnEnabled
+Boolean.
+True when WebAuthn is configured and its service started.
+.It Va .EmailPINEnabled
+Boolean.
+True when the email PIN method is available.
+.It Va .TOTPEnabled
+Boolean.
+True when
+.Va auth_methods.totp
+is enabled.
+.It Va .Pending
+The token of the second step of a sign-in, or the empty string.
+The shipped template then shows a form posting it with
+.Li code ,
+or with
+.Li action ,
+to
+.Cm /login ,
+and an edited one must keep those forms and the script that shows them,
+or accounts with
+TOTP, and every account while
+.Va second_factor
+is
+.Dq required ,
+cannot sign in.
+.It Va .Step
+Which second step the page is at, or the empty string:
+.Dq code
+for a code from an authenticator app,
+.Dq mail
+for a PIN mailed after a password, or
+.Dq enrol
+for adding a second factor.
+.It Va .EnrolTOTP , .EnrolKey
+Booleans, at the
+.Dq enrol
+step: whether an authenticator app, or a security key, may be added.
+An app is added by posting
+.Li action=totp-begin ,
+then
+.Li action=totp-finish
+with a
+.Li code ;
+a key by posting
+.Li action=key ,
+which answers
+.Sy 303
+to the key page with a one-time invite.
+.It Va .TOTPStarted , .TOTPSecret , .TOTPQR
+After
+.Li totp-begin :
+true, the app's key to type in, and a QR code holding it, as a
+.Li data\&:
+URI made by the server.
+.It Va .RecoveryCodes , .Continue
+After an app is added: its recovery codes, shown only this once, and where the
+sign-in returns to.
+The session is already set.
+.It Va .Error
+A message to show in the error banner, or the empty string.
+.It Va .Message
+A message to show in the success banner, or the empty string.
+.It Va .Referrer
+The return location taken from
+.Cm ?referrer=
+.Pq whole, when a web server sent it unencoded ,
+or from the page that linked to the login form, or the empty string.
+It is normally placed in a hidden field so the redirect survives the POST:
+.Bd -literal -offset indent
+<input type="hidden" name="referrer" value="{{.Referrer}}">
+.Ed
+.El
+.Pp
+The method flags let one template serve every installation; sections are
+switched off when their method is unavailable:
+.Bd -literal -offset indent
+{{if .PasswordEnabled}}
+<form id="login-form"> ... </form>
+{{end}}
+{{if and .PasswordEnabled (or .WebAuthnEnabled .EmailPINEnabled)}}
+<div class="divider">or</div>
+{{end}}
+{{if .WebAuthnEnabled}}
+<button id="webauthn-button">Sign in with Security Key</button>
+{{end}}
+.Ed
+.Pp
+Unknown fields render as the empty string, so a template that references a
+variable this version does not provide fails silently rather than with an
+error.
+.Sh RETURN LOCATION
+After a successful login the browser is sent to a return location.
+The first usable value wins:
+.Bl -enum -compact
+.It
+the
+.Va referrer
+field posted with the form
+.Pq the hidden input above ;
+.It
+the
+.Cm ?referrer=
+query parameter;
+.It
+the HTTP
+.Ev Referer
+header, including a
+.Cm ?referrer=
+it carries;
+.It
+the account page,
+.Pa /account
+under
+.Va base_path .
+.El
+.Pp
+Only local paths
+.Pq e.g. Pa /dashboard
+and absolute URLs on the same host are honoured; anything else falls back to
+the account page, so the parameter cannot be used to redirect users to another
+site.
+This instance's
+.Pa /login ,
+.Pa /register ,
+.Pa /recover
+and
+.Pa /logout
+never count, and the login page's
+.Va .Referrer
+is empty rather than one of them.
+.Sh RECOVER TEMPLATE VARIABLES
+The following fields are available inside
+.Pa recover.html :
+.Bl -tag -width Ds
+.It Va .RecoveryEnabled
+Boolean.
+True when
+.Va password_recovery
+is
+.Dq enabled ;
+when false the shipped template hides the form and explains why.
+.It Va .Error
+A message to show in an error banner, or the empty string.
+.It Va .Message
+An informational message, or the empty string.
+.It Va .Email
+The address that was submitted, so the form can be re-filled.
+.It Va .Token
+The token of a live link when a password was refused, so the form can be sent
+again, or the empty string.
+.It Va .Done
+Boolean.
+True once the password has been changed.
+.El
+.Pp
+A link carries its token in the URL fragment, so the page's script must read it,
+remove it from the address bar and check it with
+.Cm POST /recover
+before asking for a password.
+An edited template has to keep that script: see the shipped one.
+.Sh REGISTER TEMPLATE VARIABLES
+.Pa register.html
+receives
+.Va .RegistrationEnabled ,
+.Va .VerificationRequired ,
+which says whether the form takes only an address,
+.Va .Error ,
+.Va .Message ,
+.Va .Email ,
+.Va .Token
+and
+.Va .Done ,
+which mean what they do in
+.Pa recover.html ,
+and it needs the same script.
+.Sh LINK MESSAGE TEMPLATE VARIABLES
+The following fields are available inside
+.Pa email/recover.* ,
+.Pa email/password-changed.* ,
+.Pa email/register.*
+and
+.Pa email/account-exists.* :
+.Bl -tag -width Ds
+.It Va .Link
+The recovery or registration link, or the sign-in page in
+.Pa account-exists ;
+empty in
+.Pa password-changed .
+.It Va .Email
+The account's address.
+.It Va .Lifetime
+How long the link works, in words, such as
+.Dq 1 hour ;
+empty in the notices.
+.It Va .AppName
+The application name.
+.El
+.Pp
+Without a text template a built-in text is used,
+and without an HTML template the
+message has no HTML part.
+.Sh EMAIL PIN TEMPLATE VARIABLES
+The following fields are available inside both
+.Pa email/pin.html
+and
+.Pa email/pin.txt :
+.Bl -tag -width Ds
+.It Va .PIN
+The six-digit PIN.
+.It Va .Email
+The address the message is sent to.
+.It Va .ExpiryMinutes
+Lifetime of the PIN in minutes
+.Pq default 10 .
+.It Va .AppName
+Name of the application, for use in the greeting or signature.
+.El
+.Pp
+The message is sent as plain text from
+.Pa email/pin.txt ,
+or a built-in body if that is missing.
+If
+.Pa email/pin.html
+exists, it is added as the HTML alternative.
+A template that fails to parse stops the message from being sent,
+and the failure
+is logged.
+.Sh APPEARANCE
+The shipped
+.Pa login.html
+contains both a light and a dark palette.
+Light is the default: the dark colours apply only inside
+.Bd -literal -offset indent
+@media (prefers-color-scheme: dark) { ... }
+.Ed
+.Pp
+so a browser that has not expressed a preference
+.Pq or reports "light"
+keeps the light theme.
+All colours are CSS custom properties declared on
+.Li :root ,
+so a local template may override any of them, for example to match the
+surrounding site:
+.Bd -literal -offset indent
+:root { --primary: #0a7d32; }
+.Ed
+.Pp
+The variables are
+.Va --bg ,
+.Va --surface ,
+.Va --text ,
+.Va --heading ,
+.Va --label ,
+.Va --muted ,
+.Va --faint ,
+.Va --border ,
+.Va --input-bg ,
+.Va --primary ,
+.Va --primary-hover ,
+.Va --primary-disabled ,
+.Va --secondary ,
+.Va --secondary-hover ,
+.Va --secondary-disabled ,
+.Va --error-bg ,
+.Va --error-fg ,
+.Va --error-border ,
+.Va --success-bg ,
+.Va --success-fg ,
+.Va --success-border ,
+.Va --shadow
+and
+.Va --focus-ring .
+.Sh EXAMPLES
+A minimal standalone login page:
+.Bd -literal -offset indent
+<!DOCTYPE html>
+<html>
+<head><title>Sign in</title></head>
+<body>
+<form method="POST" action="/login">
+  <input type="email" name="email" required>
+  <input type="password" name="password" required>
+  <button type="submit">Sign in</button>
+</form>
+</body>
+</html>
+.Ed
+.Pp
+This form posts without JavaScript and is answered with a redirect and a
+session cookie.
+The packaged page instead submits with the JavaScript
+.Li fetch()
+API and expects a JSON reply.
+.Sh SEE ALSO
+.Xr signet 1 ,
+.Xr signet-config.yaml 5 ,
+.Xr signet-hooks 5
+.Sh CAVEATS
+Templates are parsed at startup, and
+.Dv SIGHUP
+does not reload them.
+After editing a template, restart the service:
+.Bd -literal -offset indent
+doas rcctl restart signet
+.Ed
+.Pp
+The page templates are the local customization point: a package upgrade does
+not overwrite an existing template directory.
+Compare the packaged examples before upgrading if the variables above change,
+and copy new pages such as
+.Pa webauthn.html
+yourself.

@@ -1,0 +1,14 @@
+Finish creating your account
+============================
+
+Someone asked to create an account with this address, {{.Email}}. To finish and choose a password, open this link:
+
+    {{.Link}}
+
+It works once, for {{.Lifetime}}.
+
+If this was not you, ignore this email. No account has been created.
+
+---
+This email was sent by {{.AppName}}.
+If you have any questions, please contact your administrator.

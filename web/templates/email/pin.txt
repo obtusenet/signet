@@ -1,0 +1,16 @@
+Your Signet Authentication PIN
+===============================
+
+Hello {{.Email}},
+
+Use the following PIN to authenticate with Signet:
+
+    {{.PIN}}
+
+This PIN will expire in {{.ExpiryMinutes}} minutes.
+
+If you did not request this PIN, please ignore this email. Your account remains secure.
+
+---
+This email was sent by {{.AppName}}.
+If you have any questions, please contact your administrator.

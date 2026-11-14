@@ -1,0 +1,16 @@
+Reset your password
+===================
+
+Hello {{.Email}},
+
+Someone asked to reset the password of this account. To choose a new one, open this link:
+
+    {{.Link}}
+
+It works once, for {{.Lifetime}}. Using it ends every session of this account.
+
+If this was not you, ignore this email. Your password has not changed.
+
+---
+This email was sent by {{.AppName}}.
+If you have any questions, please contact your administrator.

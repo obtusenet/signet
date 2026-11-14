@@ -1,0 +1,14 @@
+You already have an account
+===========================
+
+Hello {{.Email}},
+
+Someone asked to create an account with this address, but it already has one. If that was you, sign in here, where you can also recover a forgotten password:
+
+    {{.Link}}
+
+If this was not you, ignore this email. Nothing has changed.
+
+---
+This email was sent by {{.AppName}}.
+If you have any questions, please contact your administrator.

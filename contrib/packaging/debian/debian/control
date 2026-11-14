@@ -1,0 +1,23 @@
+Source: signet
+Section: web
+Priority: optional
+Maintainer: Code <code@obtusenet.com>
+Build-Depends: debhelper-compat (= 13), golang-1.26-go, gcc, libc6-dev
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/obtusenet/signet
+Vcs-Browser: https://github.com/obtusenet/signet
+Vcs-Git: https://github.com/obtusenet/signet.git
+
+Package: signet
+Architecture: any
+Depends: adduser, ${misc:Depends}, ${shlibs:Depends}
+Recommends: default-mta | mail-transport-agent
+Description: web sign-in server with passwords, security keys and TOTP
+ Signet signs people in to web applications with a password, a security key
+ (WebAuthn), a PIN sent by mail or a TOTP code, and tells a web server or an
+ application who is signed in.  Accounts are kept in a CSV file and sessions
+ in SQLite.
+ .
+ The service is installed but not started: set cookie_secret in
+ /etc/signet/config.yaml, then run "systemctl enable --now signet".

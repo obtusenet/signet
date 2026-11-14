@@ -1,0 +1,799 @@
+.\"-
+.\" Copyright (c) 2026 Obtuse Networking LLC
+.\" SPDX-License-Identifier: MIT
+.\" $OpenBSD$
+.\"
+.Dd $Mdocdate: November 5 2026 $
+.Dt SIGNET-API 7
+.Os
+.Sh NAME
+.Nm signet-api
+.Nd signet HTTP API
+.Sh DESCRIPTION
+.Xr signet 1
+listens for HTTP on
+.Va listen
+.Pq default Pa :8080 ,
+a TCP address or, when it is an absolute path, a Unix domain socket —
+usually behind a TLS-terminating reverse proxy; see
+.Xr signet-config.yaml 5 .
+.Pp
+Requests are logged one line each at the
+.Dq info
+level:
+.Bd -literal -offset indent
+http request method=POST uri="/login" status=200 bytes=41 duration=312us remote=192.0.2.9
+.Ed
+.Pp
+The client address is the connection's, or, from a peer in
+.Li trusted_proxies ,
+the rightmost
+.Ev X-Forwarded-For
+entry that is not a trusted proxy.
+.Pp
+Every refused attempt is also logged as a warning naming the limit:
+.Bd -literal -offset indent
+WARN: rate limited: login attempts for a@example.com from 192.0.2.9
+WARN: rate limited: PIN send for a@example.com from 192.0.2.9
+WARN: rate limited: validation API for client "scribe" from 192.0.2.9
+.Ed
+.Sh CONVENTIONS
+.Bl -tag -width Ds
+.It Paths
+The paths below are from the root.
+With
+.Li base_path
+set, every one is under it:
+.Pa /login
+is then
+.Pa /comments-auth/login .
+Outside the base everything answers
+.Sy 404 .
+Redirects and links name the base, the default return address after a sign-in
+.Pa /comments-auth/account
+included.
+.It Limits
+A request body over 128 KiB answers
+.Sy 413 .
+Every response carries
+.Li X-Frame-Options: DENY
+and
+.Li X-Content-Type-Options: nosniff .
+What is not a valid address is refused before anything else looks at it.
+An address is one plain
+.Li local@domain :
+lists, names, quotes, comments,
+.Li \&|
+and
+.Li /
+are refused.
+Addresses match without regard to case, and replies, sessions and
+.Li Remote-Email
+give the account's own form.
+.It Cross-origin requests
+A browser's request other than
+.Li GET ,
+.Li HEAD
+or
+.Li OPTIONS
+from another origin answers
+.Sy 403
+.Li {"success":false,"error":"Cross-origin request refused"} ,
+unless its host is in
+.Li allowed_redirect_hosts .
+The browser's
+.Li Sec-Fetch-Site
+header decides; without it,
+.Li Origin
+must match
+.Li Host ,
+so a web server in front must pass
+.Li Host
+on unchanged.
+Clients that send neither header are not affected.
+.Li /api/v1/validate
+is exempt: its API key and each client's
+.Li allowed_origins
+govern it.
+.It Content types
+Request bodies are JSON
+.Pq Li application/json
+except the login and recovery forms.
+Responses are JSON on the API endpoints, and
+.Li text/plain
+for endpoints that do not negotiate.
+.It Content negotiation
+.Cm POST /login
+answers JSON when the request carries
+.Li Accept: application/json
+or
+.Li X-Requested-With: XMLHttpRequest ,
+and a redirect otherwise.
+.It Authentication
+Everything except
+.Cm GET /login ,
+.Cm POST /login ,
+.Cm GET /recover ,
+.Cm POST /recover ,
+.Cm GET /register ,
+.Cm POST /register ,
+.Cm GET /health
+and the WebAuthn/PIN entry points requires the session cookie
+.Va signetid .
+.It Errors
+Every JSON endpoint answers failures with a JSON body and an HTTP status code
+that describes the failure, so a client can branch on the status alone.
+The body is
+.Bd -literal -offset indent
+{"success": false, "error": "human readable reason"}
+.Ed
+for actions, and
+.Bd -literal -offset indent
+{"valid": false, "error": "human readable reason"}
+.Ed
+for
+.Cm /session
+and
+.Cm /api/v1/validate .
+Plain-text bodies remain only on the HTML form paths
+.Pq Cm POST /login No without JSON negotiation , Cm GET /login .
+.El
+.Sh SESSIONS
+A successful sign-in creates a row in the session store and sets a cookie:
+.Bd -literal -offset indent
+Set-Cookie: signetid=<token>:<signature>; Path=/; Max-Age=86400;
+    HttpOnly; SameSite=Strict[; Secure]
+.Ed
+.Pp
+The value is a random token, 32 bytes as 64 hex characters, and a signature:
+the SHA-256 of
+.Va cookie_secret
+followed by the token, in hex.
+It is not an HMAC, and needs none: each token is also looked up in the
+session store, so a signature alone admits nobody.
+Sessions survive a restart, and instances sharing a database accept each
+other's cookies when they use the same secret.
+Changing the secret signs everyone out.
+.Va Secure
+is controlled by
+.Va cookie_secure
+and
+.Va Max-Age
+by
+.Va cookie_max_age .
+.Pp
+.Cm GET /session
+also returns the headers
+.Ev Remote-User
+and
+.Ev Remote-Email ,
+and
+.Ev Remote-Avatar
+for an account with a picture,
+so a reverse proxy can use it for forward authentication.
+A visitor can send these headers too.
+The proxy must remove the visitor's copies of all three before the request
+reaches the application, since
+.Ev Remote-Avatar
+is not always replaced.
+.Sh ENDPOINTS
+.Ss Login
+.Bl -tag -width Ds
+.It Cm GET /login
+Renders the login page
+.Pq Pa login.html ,
+honouring
+.Cm ?referrer= .
+An unencoded value with a
+.Sq \&?
+of its own, as a web server sends, is taken whole and verbatim, to the end of
+the query.
+Answers
+.Sy 200
+with HTML.
+.It Cm POST /login
+Form-encoded with
+.Va email ,
+.Va password
+and optionally
+.Va referrer .
+.Bl -tag -width Ds -compact
+.It Sy 200
+JSON
+.Li {"success":true,"redirect":"/path"}
+plus the session cookie.
+.It Sy 302
+Location set to the same target, plus the cookie.
+.It Sy 400
+email or password missing.
+.It Sy 401
+invalid credentials, an unknown, locked or unapproved account, the address
+is rate limited, or the account is locked after
+.Va account_lockout_threshold
+failed sign-ins in a row, right password or not, always with the same answer.
+.It Sy 403
+.Va auth_methods.password
+is disabled, or the claims hook refused under
+.Li fail-closed .
+.It Sy 500
+the page could not be rendered.
+.El
+.Pp
+The redirect target is, in order, the posted
+.Va referrer ,
+the
+.Cm ?referrer=
+query parameter, the HTTP
+.Ev Referer
+header, then the account page
+.Pa /account .
+Only local paths and URLs on the same host are accepted,
+plus absolute URLs on hosts listed in
+.Va allowed_redirect_hosts
+.Pq see Xr signet-config.yaml 5 ,
+which are returned in full.
+A path with a
+.Li \&.
+or
+.Li \&..
+segment, encoded or not, is refused, since a browser resolves
+.Pa /.//evil.example/
+to
+.Pa //evil.example/ ,
+another host.
+This instance's
+.Pa /login ,
+.Pa /register ,
+.Pa /recover
+and
+.Pa /logout
+are never a target: returning to one after registering confuses, and to
+.Pa /logout
+signs the person out again.
+.It Cm GET /
+With a session, HTML naming the signed-in user.
+Without one,
+.Sy 302
+to
+.Pa /login .
+.El
+.Ss Session
+.Bl -tag -width Ds
+.It Cm GET /session
+.Bl -tag -width Ds -compact
+.It Sy 200
+.Bd -literal -offset indent
+{"valid":true, "user":..., "email":..., "method":...,
+ "created_at":..., "expires_at":..., "claims":{...},
+ "claims_refreshed":false, "avatar":null}
+.Ed
+and the
+.Ev Remote-User ,
+.Ev Remote-Email
+headers.
+.Li avatar
+is the URL of the account's picture, or
+.Li null
+when it has none or
+.Va avatars
+is off; when it is set, the
+.Ev Remote-Avatar
+header has the same value.
+.It Sy 401
+.Li {"valid":false,"error":"..."}
+for an absent, expired or forged cookie.
+.El
+.Pp
+.Cm ?claims=refresh
+re-runs the external claims hook, stores its answer and returns it with
+.Li "claims_refreshed":true .
+An account gets
+.Va claims_hook.refresh_rate_limit
+runs in
+.Va claims_hook.refresh_rate_window
+seconds; past that the stored claims are answered with
+.Li "claims_refreshed":false ,
+as when the hook fails.
+Without a configured hook the parameter does nothing.
+.It Cm GET /logout , Cm POST /logout
+Deletes the session row and expires the cookie
+.Pq Li Max-Age=0 .
+.Bl -tag -width Ds -compact
+.It Sy 200
+.Li {"success":true}
+for XHR requests.
+.It Sy 303
+to
+.Pa /login
+otherwise.
+.It Sy 405
+any other method.
+.El
+.Pp
+Logging out without a session succeeds the same way.
+.El
+.Ss Recovery
+.Bl -tag -width Ds
+.It Cm GET /recover
+Renders
+.Pa recover.html ,
+with
+.Li .RecoveryEnabled
+true when
+.Va password_recovery
+is enabled,
+.Va public_url
+is set and passwords are not disabled.
+A mailed link is
+.Li <public_url><base_path>/recover#token=<token> ,
+and the page's script checks it before asking for a password.
+.Sy 200 .
+.It Cm POST /recover
+Form-encoded.
+.Sy 403
+when recovery is off.
+With
+.Li email :
+.Sy 400
+without one, otherwise
+.Sy 200
+and the same text for every address, and a link is mailed if the account may
+sign
+in.
+With
+.Li token :
+.Sy 200
+if the link is live,
+.Sy 400
+if not, and nothing is spent.
+With
+.Li token
+and
+.Li password :
+.Sy 400
+for a dead link or a short password, which leaves the link usable, otherwise
+.Sy 200 ;
+the password changes, every session of the account ends and a notice is mailed.
+With
+.Li Accept: application/json
+replies are
+.Li {"success":...,"message":...}
+or
+.Li "error" .
+.El
+.Ss Code step
+For an account with a TOTP key, a right password or PIN starts no session.
+.Cm POST /login
+answers the page with its code form, or with
+.Li Accept: application/json ,
+.Li {"success":false,"totp_required":true,"step":"code","pending":"..."} ,
+and
+.Cm POST /email-pin/verify
+answers that JSON.
+.Cm POST /login
+with form fields
+.Li pending
+and
+.Li code ,
+which may be a recovery code, then answers
+.Sy 302
+and the session cookie, or
+.Sy 401
+and the page.
+A code works once, five wrong ones per address in five minutes stop further
+tries, and
+.Li pending
+lasts five minutes.
+The session's
+.Li method
+says what was used, such as
+.Dq password+totp .
+.Pp
+With
+.Va second_factor
+.Dq required ,
+every sign-in by password or PIN takes a second step, named in the JSON
+.Li step :
+.Dq code ,
+.Dq mail
+or
+.Dq enrol ;
+.Li totp_required
+is true only for the first.
+A security key must verify its user and signs in alone.
+.Bl -tag -width Ds
+.It Dq mail
+After a password, with
+.Li email_pin
+in
+.Va second_factor_methods ,
+a PIN is mailed;
+.Li pending
+and
+.Li code
+set to it answer as above.
+A wrong PIN counts toward the lockout, and after three the step ends.
+.It Dq enrol
+For an account with no app and no key,
+.Li pending
+and
+.Li action :
+none shows the choices;
+.Li totp-begin
+shows a new app key;
+.Li totp-finish
+with
+.Li code
+answers
+.Sy 200 ,
+the session and the recovery codes, once;
+.Li key
+answers
+.Sy 303
+to
+.Pa /webauthn/keys
+with a one-time invite in the fragment, after which the key signs in.
+The step lasts fifteen minutes.
+.El
+.Pp
+An account whose only second factor is a key gets
+.Sy 403
+for a right password or PIN.
+.Cm POST /account
+refuses with
+.Sy 409
+to remove an account's last app or key, unless
+.Va second_factor_methods
+lists
+.Li email_pin .
+.Ss Account
+.Bl -tag -width Ds
+.It Cm GET /account
+Renders
+.Pa account.html ,
+or
+.Sy 302
+to
+.Pa /login
+with no session.
+.It Cm POST /account
+JSON.
+.Li {"action":"password","current":"...","new":"..."}
+changes the password, ends the account's other sessions and mails a notice.
+.Sy 401
+with no session,
+.Sy 403
+when the sign-in is older than
+.Va account_reauth_window ,
+.Sy 400
+for a wrong current password or a short new one.
+.Pp
+With TOTP on,
+.Li {"action":"totp-begin","label":"..."}
+answers
+.Li secret ,
+.Li url
+and
+.Li qr ,
+a PNG data URI, and saves nothing.
+.Li {"action":"totp-finish","code":"..."}
+saves the key if the code is right, answering
+.Li recovery_codes
+for an account's first key.
+.Li {"action":"totp-remove","id":"..."}
+removes a key and ends the account's other sessions.
+.Li {"action":"totp-codes"}
+replaces the recovery codes.
+.Pp
+With
+.Va avatars
+on,
+.Li {"action":"avatar-set","image":"..."}
+stores a picture: a PNG or JPEG, base64, exactly
+.Va avatar_size
+pixels square, answering its path as
+.Li avatar .
+.Sy 400
+for another size or format,
+.Sy 429
+past
+.Va avatar_rate_limit .
+.Li {"action":"avatar-remove"}
+removes it.
+Neither mails a notice.
+.It Cm GET /avatar/<id>
+The picture, to anyone, with
+.Li Cache-Control: public, max-age=31536000, immutable .
+The id is random and new with every upload;
+.Sy 404
+once the picture is replaced or removed.
+It is never served as uploaded: it is decoded and encoded again, which drops
+metadata.
+.El
+.Pp
+Adding or removing a security key needs a recent sign-in too, and answers
+.Sy 403
+without one, unless an invite is used.
+.Ss Email PIN
+Both endpoints answer
+.Sy 503
+when
+.Va auth_methods.email_pin
+is not enabled.
+.Bl -tag -width Ds
+.It Cm POST /email-pin/send
+JSON
+.Li {"email": "a@example.com"} .
+.Bl -tag -width Ds -compact
+.It Sy 200
+.Li {"success":true,"message":"PIN sent to your email"}
+.It Sy 400
+malformed body or missing address.
+.It Sy 429
+rate limit exceeded, per requester or per address.
+.It Sy 500
+an internal error, such as the database being unavailable.
+.El
+The
+.Sy 200
+is the same for every address: no mail goes to an unknown account, one that may
+not sign in, or one locked out after wrong guesses,
+and a message the mail system
+refuses also answers
+.Sy 200 .
+.It Cm POST /email-pin/verify
+JSON
+.Li {"email": "a@example.com", "pin": "123456"} .
+.Bl -tag -width Ds -compact
+.It Sy 200
+.Li {"success":true,"message":"PIN verified successfully"}
+and the session cookie.
+.It Sy 400
+missing fields, or the PIN is wrong, used or expired.
+Three wrong guesses against an address lock PIN sign-in for it for 30 minutes,
+with the same answer, whichever client address made them.
+.It Sy 403
+the claims hook refused under
+.Li fail-closed .
+.It Sy 429
+rate limit exceeded.
+.It Sy 500
+internal error.
+.El
+.El
+.Ss WebAuthn
+Bodies are JSON in the WebAuthn Level 2 encoding, with binary fields base64url
+encoded.
+A
+.Sy start
+call returns a
+.Li ceremony
+ID, which the matching
+.Sy finish
+call presents once; it expires after five minutes.
+Enrollment acts on the account of the signed-in session, or of the invite in
+the
+.Li X-Signet-Invite
+header; an address in the request is ignored.
+The calls that start or finish a ceremony count against
+.Li webauthn_rate_limit
+per requester, and over budget answer
+.Sy 429
+with
+.Li {"success":false,"error":"Rate limit exceeded"} .
+.Bl -tag -width Ds
+.It Cm GET /webauthn/invite
+With the invite in the
+.Li X-Signet-Invite
+header, whether it can still enroll a key, without spending it.
+.Sy 200
+.Li {"success":true} ,
+.Sy 400
+without an invite,
+.Sy 401
+when it is used, expired or unknown,
+.Sy 403
+when the account may not sign in.
+.It Cm POST /webauthn/register/start
+.Sy 200
+.Li {"success":true,"options":{...},"ceremony":"..."} ,
+.Sy 401
+without a session or valid invite,
+.Sy 403
+when the account may not sign in.
+.It Cm POST /webauthn/register/finish?ceremony=...&label=...
+Body: the registration response.
+.Sy 200
+.Li {"success":true,"credential":{...}} ,
+.Sy 400
+when it fails verification,
+.Sy 401
+and
+.Sy 403
+as above.
+Using an invite spends it.
+.It Cm POST /webauthn/authenticate/start?email=...
+.Sy 200
+.Li {"success":true,"options":{...},"ceremony":"..."} ,
+.Sy 400
+without an address.
+.Sy 401
+for what is not a valid address.
+Any valid address gets options, so the reply does not show which accounts have a
+key: one that is unknown, may not sign in or has no keys is offered invented
+keys
+that stay the same for that address, and finishing fails.
+.It Cm POST /webauthn/authenticate/finish?email=...&ceremony=...
+Body: the assertion response.
+.Sy 200
+.Li {"success":true}
+and the session cookie,
+.Sy 401
+when it fails verification or the signature counter did not increase,
+.Sy 403
+when the claims hook refuses under
+.Li fail-closed .
+.It Cm GET /webauthn/credentials
+The signed-in user's credentials,
+.Sy 401
+without a session.
+.It Cm DELETE /webauthn/credentials/<id>
+Delete one of the signed-in user's credentials and end every session of the
+account, this one included.
+.Sy 200
+.Li {"success":true,"signed_out":true}
+and the session cookie expired,
+.Sy 404
+when no such credential belongs to them.
+.It Cm GET /webauthn/keys
+The security-key page.
+An invite link opens it with
+.Li #invite=...
+in the fragment.
+.El
+.Ss Validation API
+.Bl -tag -width Ds
+.It Cm POST /api/v1/validate
+For applications registered with
+.Cm signet client-add ,
+which prints the key once.
+The key travels in the
+.Li X-API-Key
+header.
+The
+.Va signetid
+cookie may be sent in the
+.Li Cookie
+header, or in the JSON body as
+.Li {"cookie": "..."}
+\(em the body wins when both are present, so an application that stores the
+value itself does not depend on the caller's headers.
+.Bl -tag -width Ds -compact
+.It Sy 200
+.Li {"valid":true,"user":...,"method":...,"claims":{...},"avatar":...}
+.It Sy 400
+the JSON body is not valid JSON.
+.It Sy 401
+.Li {"valid":false,"error":"..."}
+for a missing or unknown API key, a missing cookie, a bad signature, or a
+session that has expired or been deleted.
+.It Sy 403
+a CORS preflight from an origin no client allows.
+.It Sy 405
+any method but POST.
+.It Sy 429
+.Li {"valid":false,"error":"rate limit exceeded"}
+above
+.Va api_rate_limit
+per
+.Va api_rate_window .
+.El
+.Pp
+When the request carries an
+.Li Origin
+allowed by a client's
+.Va allowed_origins ,
+the response adds the matching CORS headers, and
+.Cm OPTIONS
+answers
+.Sy 204 .
+.El
+.Ss Miscellaneous
+.Bl -tag -width Ds
+.It Cm GET /health
+.Sy 200
+.Li {"status":"ok"} .
+.It Cm GET /static/js/webauthn.js
+The browser WebAuthn client, when
+.Va static_dir
+is set.
+Only files are served from
+.Va static_dir :
+a directory answers
+.Sy 404
+and is never listed.
+.It Cm GET /register
+Renders
+.Pa register.html .
+.It Cm POST /register
+.Sy 403
+while registration is off.
+With
+.Va email_verification
+.Dq required ,
+form field
+.Li email
+answers
+.Sy 200
+and the same text for every address, and mails a link, or tells the owner of an
+account that it exists;
+.Li token
+checks a link, spending nothing;
+.Li token
+and
+.Li password
+create the account, or answer
+.Sy 400
+for a dead link, an address that now has an account or a short password.
+An account never exists before its link is used.
+With
+.Va email_verification
+.Dq disabled ,
+.Li email
+and
+.Li password
+create it at once and answer
+.Sy 302 ,
+.Sy 409
+when the address has an account, and
+.Sy 429
+over
+.Li register_rate_limit
+per requester.
+.El
+.Sh EXAMPLES
+Sign in and keep the cookie:
+.Bd -literal -offset indent
+$ curl -c jar -H 'Accept: application/json' \e
+    -d 'email=a@example.com&password=secret&referrer=/app' \e
+    http://127.0.0.1:8080/login
+{"redirect":"/app","success":true}
+.Ed
+.Pp
+Inspect the session:
+.Bd -literal -offset indent
+$ curl -b jar http://127.0.0.1:8080/session
+{"valid":true,"user":"a@example.com","method":"password",...}
+.Ed
+.Pp
+Sign out:
+.Bd -literal -offset indent
+$ curl -b jar -X POST -H 'Accept: application/json' \e
+    http://127.0.0.1:8080/logout
+{"success":true}
+.Ed
+.Sh SEE ALSO
+.Xr signet 1 ,
+.Xr signet-config.yaml 5 ,
+.Xr signet-hooks 5 ,
+.Xr signet-template 5
+.Sh CAVEATS
+.Cm POST /email-pin/send
+answers
+.Sy 200
+whether or not a message was handed to the mail system, so that it shows nothing
+about which accounts exist.
+A refusal is in the log.
+.Pp
+Removing an account from the CSV file by hand, or setting its
+.Dq locked
+flag, stops new logins but leaves existing sessions valid until they expire;
+.Cm signet user-delete
+ends them.
+.Pp
+An API client's key is shown once by
+.Cm signet client-add ;
+store it in the application's configuration.
+Deleting the client with
+.Cm signet client-revoke
+invalidates the key immediately.

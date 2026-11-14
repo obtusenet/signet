@@ -1,0 +1,16 @@
+build/
+dist/
+*.db
+*.swp
+*.swo
+*~
+.env
+contrib/packaging/docker/config.yaml
+.vscode/
+.idea/
+
+# Hermes agent workspace (plans etc.)
+.hermes/
+
+# Local Makefile settings: the build and test boxes
+local.mk

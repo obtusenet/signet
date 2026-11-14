@@ -1,0 +1,453 @@
+{{define "webauthn"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signet - Security Keys</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --text: #333333;
+      --heading: #1a1a2e;
+      --label: #444444;
+      --muted: #666666;
+      --border: #e1e5eb;
+      --input-bg: #ffffff;
+      --primary: #4a90e2;
+      --primary-hover: #357abd;
+      --error-bg: #ffeeee;
+      --error-fg: #cc3333;
+      --error-border: #ffcccc;
+      --success-bg: #eeffee;
+      --success-fg: #33aa33;
+      --success-border: #ccffcc;
+      --shadow: rgba(0, 0, 0, 0.08);
+      --focus-ring: rgba(74, 144, 226, 0.15);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12151a;
+        --surface: #1b1f27;
+        --text: #d7dce5;
+        --heading: #eef2f8;
+        --label: #c2c9d4;
+        --muted: #9aa4b2;
+        --border: #2f3742;
+        --input-bg: #141821;
+        --primary: #5aa0f0;
+        --primary-hover: #74b0f5;
+        --error-bg: #3a1f22;
+        --error-fg: #ffb4b4;
+        --error-border: #5d2b30;
+        --success-bg: #16301f;
+        --success-fg: #9fe0a8;
+        --success-border: #245c33;
+        --shadow: rgba(0, 0, 0, 0.5);
+        --focus-ring: rgba(90, 160, 240, 0.3);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    main {
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px var(--shadow);
+      padding: 32px;
+    }
+
+    h1 {
+      color: var(--heading);
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    #account {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+      overflow-wrap: anywhere;
+    }
+
+    .message {
+      border: 1px solid;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      padding: 12px;
+    }
+
+    .message.error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: var(--error-fg);
+    }
+
+    .message.success {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: var(--success-fg);
+    }
+
+    ul {
+      list-style: none;
+      margin-bottom: 24px;
+    }
+
+    li {
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 12px 0;
+    }
+
+    li span {
+      overflow-wrap: anywhere;
+    }
+
+    li small {
+      color: var(--muted);
+      display: block;
+      margin-top: 2px;
+    }
+
+    label {
+      color: var(--label);
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    input {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 16px;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      width: 100%;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--focus-ring);
+      outline: none;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      padding: 10px 16px;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+
+    #add {
+      background: var(--primary);
+      color: #ffffff;
+      width: 100%;
+    }
+
+    #add:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .remove {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--error-fg);
+      flex-shrink: 0;
+      font-size: 13px;
+      padding: 6px 10px;
+    }
+
+    nav {
+      font-size: 14px;
+      margin-top: 24px;
+      text-align: center;
+    }
+
+    a {
+      color: var(--primary);
+    }
+
+    dialog {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px var(--shadow);
+      color: var(--text);
+      margin: auto;
+      max-width: calc(100vw - 32px);
+      padding: 24px;
+      width: 420px;
+    }
+
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    dialog h2 {
+      color: var(--heading);
+      font-size: 18px;
+      margin-bottom: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    dialog p {
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    #remove-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    #remove-confirm {
+      background: var(--error-bg);
+      border: 1px solid var(--error-border);
+      color: var(--error-fg);
+    }
+
+    .actions button:focus-visible {
+      box-shadow: 0 0 0 3px var(--focus-ring);
+      outline: 1px solid var(--primary);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Security keys</h1>
+    <p id="account"></p>
+    <div id="message" class="message" role="status" hidden></div>
+    <ul id="keys" hidden></ul>
+    <form id="enroll" hidden>
+      <label for="label">Name for the new key</label>
+      <input id="label" maxlength="64" placeholder="My security key" autocomplete="off">
+      <button id="add" type="submit">Add security key</button>
+    </form>
+    <nav><a id="back" href="{{basePath}}/account">Your account</a></nav>
+  </main>
+
+  <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-text">
+    <h2 id="remove-title"></h2>
+    <div id="remove-text"></div>
+    <div class="actions">
+      <button id="remove-cancel" type="button" autofocus>Cancel</button>
+      <button id="remove-confirm" type="button">Remove</button>
+    </div>
+  </dialog>
+
+  <script src="{{basePath}}/static/js/webauthn.js" data-base-path="{{basePath}}"></script>
+  <script>
+    // Where this instance's routes are: "" at the root, else its base_path.
+    const signetBase = {{basePath}};
+    // An invite stays in the fragment, which is never sent to a server.  Remove
+    // it from the address bar and history as soon as it has been read.
+    const invite = new URLSearchParams(window.location.hash.slice(1)).get('invite');
+    if (invite) {
+      history.replaceState(null, '', window.location.pathname);
+    }
+
+    const account = document.getElementById('account');
+    const message = document.getElementById('message');
+    const keys = document.getElementById('keys');
+    const form = document.getElementById('enroll');
+    const addButton = document.getElementById('add');
+    const back = document.getElementById('back');
+
+    function show(kind, text) {
+      message.className = 'message ' + kind;
+      message.textContent = text;
+      message.hidden = false;
+    }
+
+    // Everything from the server goes in through textContent.
+    function renderKeys(credentials) {
+      keys.replaceChildren();
+      for (const credential of credentials) {
+        const item = document.createElement('li');
+        const details = document.createElement('span');
+        details.textContent = credential.label;
+        const added = document.createElement('small');
+        added.textContent = 'Added ' + new Date(credential.created_at).toLocaleDateString();
+        details.append(added);
+
+        const remove = document.createElement('button');
+        remove.className = 'remove';
+        remove.type = 'button';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => removeKey(credential, credentials.length === 1));
+
+        item.append(details, remove);
+        keys.append(item);
+      }
+      keys.hidden = credentials.length === 0;
+    }
+
+    async function refresh() {
+      const { user, credentials } = await WebAuthn.listCredentials();
+      account.textContent = 'Signed in as ' + user;
+      form.hidden = false;
+      renderKeys(credentials);
+    }
+
+    function offerSignIn(referrer) {
+      back.textContent = 'Go to sign in';
+      back.href = signetBase + '/login' + (referrer ? '?referrer=' + encodeURIComponent(referrer) : '');
+    }
+
+    // Answers true only for the Remove button: Cancel and Escape both decline.
+    function confirmRemoval(credential, onlyKey) {
+      const dialog = document.getElementById('remove-dialog');
+      const lines = [
+        'It will no longer sign in to this account.',
+        'This signs the account out everywhere, including here, even if you did not sign in with this key.',
+      ];
+      if (onlyKey) {
+        lines.push('This is your only security key. Without a password, you will need an administrator to get back in.');
+      }
+      document.getElementById('remove-title').textContent = 'Remove "' + credential.label + '"?';
+      document.getElementById('remove-text').replaceChildren(...lines.map((line) => {
+        const paragraph = document.createElement('p');
+        paragraph.textContent = line;
+        return paragraph;
+      }));
+      return new Promise((resolve) => {
+        dialog.returnValue = '';
+        dialog.addEventListener('close', () => resolve(dialog.returnValue === 'remove'), { once: true });
+        dialog.showModal();
+      });
+    }
+
+    document.getElementById('remove-cancel').addEventListener('click', () => {
+      document.getElementById('remove-dialog').close('cancel');
+    });
+    document.getElementById('remove-confirm').addEventListener('click', () => {
+      document.getElementById('remove-dialog').close('remove');
+    });
+
+    async function removeKey(credential, onlyKey) {
+      if (!await confirmRemoval(credential, onlyKey)) {
+        return;
+      }
+      try {
+        await WebAuthn.deleteCredential(credential.id);
+      } catch (error) {
+        show('error', error.message);
+        if (error.status === 403) offerSignIn(signetBase + '/webauthn/keys');
+        refresh().catch(() => {});
+        return;
+      }
+      account.textContent = '';
+      form.hidden = true;
+      keys.hidden = true;
+      show('success', 'Security key removed. This account is now signed out everywhere, so sign in again to continue.');
+      offerSignIn(signetBase + '/webauthn/keys');
+    }
+
+    // The form appears only once the server says the link can still be used.
+    async function openInvite() {
+      try {
+        await WebAuthn.checkInvite(invite);
+      } catch (error) {
+        show('error', error.status === 401
+          ? 'This link has already been used or has expired. Ask your administrator for a new one.'
+          : error.message);
+        offerSignIn();
+        return;
+      }
+      account.textContent = 'Use this one-time link to add your first key.';
+      form.hidden = false;
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      addButton.disabled = true;
+      message.hidden = true;
+      WebAuthnUI.register(
+        document.getElementById('label').value,
+        invite,
+        async () => {
+          addButton.disabled = false;
+          document.getElementById('label').value = '';
+          if (invite) {
+            // The invite is spent; signing in is the next step.
+            form.hidden = true;
+            account.textContent = '';
+            show('success', 'Security key added. You can now sign in with it.');
+            offerSignIn();
+            return;
+          }
+          show('success', 'Security key added.');
+          await refresh();
+        },
+        (error) => {
+          addButton.disabled = false;
+          show('error', error.message || 'The security key could not be added.');
+          if (error.status === 403) offerSignIn(signetBase + '/webauthn/keys');
+        }
+      );
+    });
+
+    if (!window.PublicKeyCredential) {
+      show('error', 'This browser does not support security keys here. They need a secure (HTTPS) page.');
+    } else if (invite) {
+      openInvite();
+    } else {
+      refresh().catch((error) => {
+        if (error.status === 401) {
+          show('error', 'Sign in first to manage your security keys.');
+          offerSignIn(signetBase + '/webauthn/keys');
+        } else {
+          show('error', error.message);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+{{end}}

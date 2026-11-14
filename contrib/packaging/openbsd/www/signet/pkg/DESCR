@@ -1,0 +1,10 @@
+Signet is a multi-factor authentication server written in Go.
+It handles password, WebAuthn and email+PIN authentication.
+It delivers a signed cookie to the
+user's browser which dependent web applications can validate
+via a synchronous REST API.
+
+Signet stores user accounts in a CSV file and sessions,
+WebAuthn credentials, and API client registrations in SQLite3.
+It supports external claims hooks via subprocess communication
+for integrating with directory services or policy engines.

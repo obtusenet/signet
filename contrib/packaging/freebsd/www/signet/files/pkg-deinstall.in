@@ -1,0 +1,12 @@
+#!/bin/sh
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+#
+# Before removal: stop the service, which would otherwise keep running with its
+# binary and rc script gone.  Not during an upgrade (PKG_UPGRADE, pkg-script(5)):
+# the old version runs on until the administrator restarts it.
+
+[ "$2" = DEINSTALL ] || exit 0
+[ -z "${PKG_UPGRADE:-}" ] || exit 0
+service signet onestop > /dev/null 2>&1 || true
+exit 0

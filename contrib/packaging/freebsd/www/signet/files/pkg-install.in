@@ -1,0 +1,37 @@
+#!/bin/sh
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+#
+# After install: the working copies of the web files, kept where edited, and the
+# log file.
+
+[ "$2" = POST-INSTALL ] || exit 0
+
+config=%%ETCDIR%%/config.yaml
+# A setting from the config file when it is an absolute path, else the default.
+config_path() { # key default
+	value=$(sed -n "s/^$1:[[:space:]]*\"\{0,1\}\([^\"#]*\).*/\1/p" "$config" 2> /dev/null | head -1 | sed 's/[[:space:]]*$//')
+	case "$value" in
+	/*) echo "$value" ;;
+	*) echo "$2" ;;
+	esac
+}
+
+%%DATADIR%%/install-web.sh %%DATADIR%%/web/templates \
+	"$(config_path templates_dir %%ETCDIR%%/templates)" %%ETCDIR%%/.web-templates.sha256
+%%DATADIR%%/install-web.sh %%DATADIR%%/web/static \
+	"$(config_path static_dir %%ETCDIR%%/static)" %%ETCDIR%%/.web-static.sha256
+
+# The log file the syslog.d entry writes to, made once; syslogd then reads that entry.
+if [ ! -e /var/log/signet.log ]; then
+	install -m 0640 /dev/null /var/log/signet.log
+	service syslogd status > /dev/null 2>&1 && service syslogd reload > /dev/null 2>&1
+fi
+
+# A running service keeps the old version until it is restarted.  pkg ends every
+# process a script starts, so the package cannot restart it, and FreeBSD packages
+# leave services to the administrator.
+if service signet onestatus > /dev/null 2>&1; then
+	echo "signet: the running service is still the old version; run: service signet restart"
+fi
+exit 0

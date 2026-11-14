@@ -1,0 +1,12 @@
+# Only what the image is built from.  An allow-list, so a config.yaml holding
+# cookie_secret, or an .env, cannot reach the build by being in the tree.
+*
+!cmd
+!examples
+!go.mod
+!go.sum
+!internal
+!LICENSE
+!vendor
+!web
+**/.env

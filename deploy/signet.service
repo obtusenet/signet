@@ -1,0 +1,27 @@
+[Unit]
+Description=Signet Authentication Server
+Documentation=man:signet(1) man:signet-config.yaml(5)
+After=network.target
+
+[Service]
+Type=simple
+User=signet
+Group=signet
+WorkingDirectory=/opt/signet
+ExecStart=/opt/signet/signet serve --config /etc/signet/config.yaml
+# Reads the configuration and templates again; see signet(1).
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/signet /var/log/signet
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

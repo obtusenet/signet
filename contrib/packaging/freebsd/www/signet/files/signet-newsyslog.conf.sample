@@ -1,0 +1,5 @@
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+#
+# logfilename			[owner:group]	mode count size when  flags
+/var/log/signet.log				640  7     *    @T00  JC

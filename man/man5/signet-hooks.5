@@ -1,0 +1,197 @@
+.\"-
+.\" Copyright (c) 2026 Obtuse Networking LLC
+.\" SPDX-License-Identifier: MIT
+.\" $OpenBSD$
+.\"
+.Dd $Mdocdate: November 5 2026 $
+.Dt SIGNET-HOOKS 5
+.Os
+.Sh NAME
+.Nm signet-hooks
+.Nd external claims hook protocol for signet
+.Sh DESCRIPTION
+A claims hook is a program that computes application-specific claims, such as
+roles or permissions, for a user who has just proved who they are.
+.Xr signet 1
+stores the answer in the session and returns it from
+.Li GET /session
+and
+.Li POST /api/v1/validate ,
+as described in
+.Xr signet-api 7 .
+.Pp
+The hook is configured with the
+.Li claims_hook
+keys in
+.Xr signet-config.yaml 5 .
+It is enabled when
+.Li claims_hook.enabled
+is true and
+.Li claims_hook.program
+is not empty.
+.Ss When the hook runs
+Signet starts a new process for each request and never reuses one:
+.Bl -bullet
+.It
+after a correct password, email PIN or security key, before the session is
+created;
+.It
+for
+.Li GET /session?claims=refresh ,
+with the token of the existing session.
+.El
+.Ss The process
+The program is executed directly, not through a shell, with no arguments.
+It runs as the user running signet and inherits signet's environment and working
+directory.
+A name without a slash is searched for in
+.Ev PATH ,
+so give an absolute path.
+.Pp
+The login waits for the hook, so a slow hook is a slow login.
+.Ss Request
+Signet writes one line of JSON to the hook's standard input and closes it:
+.Bd -literal -offset indent
+{"type":"claim_request","email":"user@example.com"}
+.Ed
+.Bl -tag -width email
+.It Li type
+Always
+.Dq claim_request .
+.It Li email
+The address the user signed in with.
+.El
+.Pp
+A hook should ignore members it does not know,
+since a later version may add some.
+Versions before 0.13.24 also sent
+.Li session_token ,
+the session's bearer secret; it is no longer sent.
+.Ss Response
+The hook writes lines of JSON to its standard output.
+Signet reads lines until one has a
+.Li type
+of
+.Dq claim_response
+or
+.Dq claim_error ,
+and ignores JSON lines of any other type.
+It then kills the hook and any process it started,
+so do any cleanup before writing
+the answer.
+.Pp
+To grant claims:
+.Bd -literal -offset indent
+{"type":"claim_response","claims":{"role":"admin","level":3}}
+.Ed
+.Pp
+The value of
+.Li claims
+is any JSON object.
+Without it, the claims are empty.
+.Pp
+To report a failure, which also refuses the login under
+.Dq fail-closed :
+.Bd -literal -offset indent
+{"type":"claim_error","error":"no such department"}
+.Ed
+.Ss Failures
+Each of these is a failure, and is logged at warn level:
+.Bl -bullet
+.It
+the program cannot be started;
+.It
+it answers
+.Dq claim_error ;
+.It
+it writes a line that is not JSON, even before a valid answer;
+.It
+it writes a line longer than 64 KiB;
+.It
+it exits without answering, which fails at once without waiting for the timeout;
+.It
+it has not answered after
+.Li claims_hook.timeout_seconds ,
+or the client disconnects, and the process is then killed.
+.El
+.Pp
+.Li claims_hook.on_failure
+decides what a failure means:
+.Bl -tag -width "fail-closed"
+.It Dq fail-closed
+The default.
+During a login no session is created, and the client gets
+.Li 403
+with the error
+.Dq Sign-in refused ,
+whichever method was used.
+A hook can use this to deny a user.
+During a refresh the stored claims are kept and the reply has
+.Li claims_refreshed
+set to false.
+.It Dq fail-open
+During a login the session is created with empty claims.
+During a refresh the stored claims are replaced with empty ones,
+and the reply has
+.Li claims_refreshed
+set to true.
+.El
+.Ss Diagnostics
+Signet discards the hook's standard error.
+To keep debug output, have the hook write it somewhere itself, such as
+.Xr syslog 3
+or its own file.
+.Sh FILES
+.Bl -tag -width Ds -compact
+.It Pa /usr/local/share/examples/signet/hooks/
+Example hooks on
+.Ox ,
+with
+.Pa test-hooks.sh ,
+which checks that they answer the protocol.
+.It Pa /usr/share/doc/signet/examples/hooks/
+The same on Linux.
+.El
+.Sh EXAMPLES
+A configuration:
+.Bd -literal -offset indent
+claims_hook:
+  enabled: true
+  program: "/usr/local/libexec/signet-claims"
+  timeout_seconds: 5
+  on_failure: "fail-closed"
+.Ed
+.Pp
+A minimal hook that gives everyone the same claim.
+It reads the request, answers and exits:
+.Bd -literal -offset indent
+#!/bin/sh
+read -r request
+echo '{"type":"claim_response","claims":{"role":"user"}}'
+.Ed
+.Pp
+Trying a hook by hand:
+.Bd -literal -offset indent
+$ echo '{"type":"claim_request","email":"a@example.com"}' |
+    /usr/local/libexec/signet-claims
+.Ed
+.Sh SEE ALSO
+.Xr signet 1 ,
+.Xr signet-config.yaml 5 ,
+.Xr signet-template 5 ,
+.Xr signet-api 7
+.Sh CAVEATS
+Signet runs the hook in its own process group and kills the whole group,
+so anything
+the hook started ends with it.
+Only a process that moves to a new session or process group survives.
+.Pp
+Claims are stored in the session when it is created,
+and change only when a client
+asks for
+.Li claims=refresh ,
+at most
+.Va claims_hook.refresh_rate_limit
+times per account in
+.Va claims_hook.refresh_rate_window
+seconds.

@@ -1,0 +1,5 @@
+man/man1/signet.1
+man/man5/signet-config.yaml.5
+man/man5/signet-hooks.5
+man/man5/signet-template.5
+man/man7/signet-api.7

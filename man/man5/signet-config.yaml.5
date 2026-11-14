@@ -1,0 +1,921 @@
+.\"-
+.\" Copyright (c) 2026 Obtuse Networking LLC
+.\" SPDX-License-Identifier: MIT
+.\" $OpenBSD$
+.\"
+.Dd $Mdocdate: November 5 2026 $
+.Dt SIGNET-CONFIG.YAML 5
+.Os
+.Sh NAME
+.Nm signet-config.yaml
+.Nd signet configuration file
+.Sh DESCRIPTION
+.Nm
+is the configuration file for
+.Xr signet 1 .
+It is written in YAML format.
+.Pp
+The packages install it as
+.Pa /etc/signet/config.yaml
+on
+.Ox
+and Debian, and as
+.Pa /usr/local/etc/signet/config.yaml
+on
+.Fx ,
+and that is where their
+.Xr signet 1
+looks without
+.Fl config .
+A build from source looks for
+.Dq config.yaml
+in the current directory.
+.Sh FORMAT
+All fields are optional except
+.Va listen
+and, for
+.Cm signet serve ,
+.Va cookie_secret .
+Defaults are given with each field.
+.Pp
+A key that is not described here stops
+.Xr signet 1
+from loading the file, with an error naming the key and its line,
+at the top level and inside a block alike.
+So does a name under
+.Va auth_methods
+other than
+.Li password , webauthn , email_pin
+and
+.Li totp ,
+or a value there other than
+.Dq enabled
+and
+.Dq disabled .
+A misspelt setting would otherwise leave its default in force.
+The old keys
+.Li listen_addr
+(now
+.Va listen ) ,
+.Li webauthn_enabled ,
+.Li email_pin_auth
+and
+.Li log_file
+still load,
+and
+.Cm signet serve
+warns about the last three.
+.Pp
+The configuration is organized into the following sections:
+.Bl -tag -width Ds
+.It Li listen
+The address to listen on.
+Three shapes:
+.Ic 1.2.3.4:9000
+(an IP and port; bracketed IPv6 such as
+.Ql [::]:9090
+included),
+.Ic :9000
+(port only, all interfaces), or an absolute path such as
+.Pa /var/www/signet/signet.sock
+to bind a Unix domain socket.
+A bare port
+.Pq no colon at all
+is normalised to
+.Ql :\&port .
+Relative paths do not select a socket.
+Default:
+.Dq :8080 .
+.It Li protocol
+The protocol served on
+.Va listen :
+.Ic http
+(default) or
+.Ic fastcgi .
+The FastCGI protocol exists for web servers that speak FastCGI but cannot
+reverse-proxy HTTP — notably
+.Xr httpd 8
+on
+.Ox ,
+where it lets signet share one origin with the site.
+It works on either listen shape: a Unix socket path (typical) or a TCP
+address.
+The web server sends
+.Ev HTTPS=on
+for TLS connections, so requests behind it are treated as secure.
+.It Li base_path
+The path every route of this instance is under, such as
+.Dq /comments-auth ,
+so that several instances can share a host, each with its own users, database,
+hook and settings.
+The login page is then
+.Pa /comments-auth/login ,
+the health check
+.Pa /comments-auth/health ,
+and so on.
+It has a leading slash and no trailing one, and each part holds only letters,
+digits and
+.Dq .\& _ ~ - .
+The web server passes the path whole, without removing the base; anything
+outside the base answers 404, as does a path with
+.Dq .. ,
+.Dq .\&
+or
+.Dq // .
+Pages, redirects, mail links and the script all name the base.
+Instances on one host must have different
+.Va cookie_name
+values, since the cookie's path stays
+.Pa /
+so that the site's applications receive it.
+Default: empty, the root.
+.It Li socket_mode
+Octal file mode for the socket file when
+.Va listen
+is a path.
+Default:
+.Dq 0660 .
+A reverse proxy running as a different user needs write permission: put the
+socket in a directory the proxy can traverse, or open the mode
+(e.g.\&
+.Dq 0666 )
+and let file-system permissions be the access boundary.
+A web server reaching signet over this socket must be named in
+.Li trusted_proxies ,
+or every client shares one rate-limit budget.
+.It Li trusted_proxies
+The peers whose
+.Ev X-Forwarded-For
+header is believed: IP addresses, CIDR ranges, or
+.Dq unix
+for a peer on a unix socket.
+The header is read from the right, and the first address that is not a trusted
+proxy
+is the client, which the rate limits and the request log use.
+From any other peer the header is ignored,
+because a client can send anything in it.
+With
+.Li protocol: fastcgi
+leave this empty: the web server reports the client in the protocol itself.
+Do not list
+.Dq unix
+if local users who should not be able to choose their rate-limit budget can
+connect to
+the socket.
+Default: empty.
+.It Li templates_dir
+Path to the HTML templates directory.
+The server refuses to start if a file in it cannot be read or parsed,
+or if there is
+no login page.
+Default:
+.Pa /etc/signet/templates .
+.It Li static_dir
+Path to the static files directory (JavaScript, CSS, images).
+Default:
+.Pa /etc/signet/static .
+.It Li database_path
+Path to the SQLite3 database file for sessions, WebAuthn credentials,
+and clients.
+It holds only SHA-256 hashes of session tokens,
+so a copy of it gives no working sessions,
+and removed rows are overwritten.
+Expired sessions and PINs are removed at startup and every hour.
+A PIN stays until 30 minutes after it expires,
+because failed guesses are counted on
+it.
+A new database is created with mode 0600; an existing one keeps its mode.
+Default:
+.Pa /var/lib/signet/sessions.db .
+.It Li csv_path
+Path to the CSV file containing user accounts.
+Signet replaces this file by rename, keeping its owner and mode,
+so it needs write
+access to the directory as well, and the file cannot be a single-file mount.
+It also takes its write lock on the directory.
+Default:
+.Pa /var/lib/signet/users.csv .
+.El
+.Pp
+The following fields control password hashing:
+.Bl -tag -width Ds
+.It Li password_hash_algorithm
+Hash algorithm for new users.
+Must be
+.Dq bcrypt
+or
+.Dq argon2id .
+Default:
+.Dq argon2id .
+.It Li bcrypt_cost
+Cost factor for bcrypt hashing.
+Must be between 4 and 31.
+Default: 12.
+.It Li argon2id_time
+Number of iterations for argon2id, 1 to 64.
+Default: 1.
+.It Li argon2id_memory
+Memory usage in kilobytes for argon2id,
+from 8 times
+.Li argon2id_parallelism
+to 4194304 (4 GB).
+Default: 65536 (64 MB).
+.It Li argon2id_parallelism
+Parallelism (threads) for argon2id, 1 to 255.
+Default: 4.
+.It Li argon2id_salt_length
+Salt length in bytes for argon2id, at least 8.
+Default: 16.
+.It Li argon2id_key_length
+Key length in bytes for argon2id, at least 16.
+Default: 32.
+.Pp
+.Xr signet 1
+will not start with argon2id settings outside these ranges.
+An argon2id hash in
+.Pa users.csv
+with parameters outside them,
+or in another form than
+.Li $argon2id$v=19$m=...,t=...,p=...$salt$key ,
+cannot be checked:
+its password is refused like a wrong one,
+and a warning names the account.
+.El
+.Pp
+The following fields control authentication behavior:
+.Bl -tag -width Ds
+.It Li self_registration
+Whether self-registration is allowed.
+When not
+.Dq enabled ,
+.Cm POST /register
+answers 403 and the login page does not link to it.
+Must be
+.Dq enabled
+or
+.Dq disabled .
+Default:
+.Dq disabled .
+.It Li email_verification
+How self-registration proves an address.
+With
+.Dq required ,
+.Cm /register
+takes only an address and mails a link, and the account is created when the link
+is used, with the password chosen there.
+Registration stays off, with a warning, until
+.Va public_url
+is set.
+With
+.Dq disabled ,
+it creates the account at once: nothing proves the address, anyone can register
+someone else's, and the reply shows which addresses have accounts.
+It does not affect accounts made with
+.Cm user-add .
+Default:
+.Dq required .
+.It Li registration_link_ttl
+Seconds a registration link works.
+Default: 86400.
+.It Li self_registration_approval
+Whether self-registered users require approval.
+While
+.Dq required ,
+an account with the
+.Dq self_registered
+flag and without
+.Dq approved
+cannot sign in by any method until
+.Cm signet user-approve
+has run.
+Must be
+.Dq required
+or
+.Dq auto_approve .
+Default:
+.Dq required .
+.It Li multi_device
+Not implemented yet: accepted and ignored.
+With
+.Dq disabled ,
+a new sign-in is meant to end the account's other sessions.
+Must be
+.Dq enabled
+or
+.Dq disabled .
+Default:
+.Dq enabled .
+.It Li password_recovery
+Whether a mailed link can reset a password.
+Must be
+.Dq enabled
+or
+.Dq disabled .
+It stays off, with a warning, until
+.Va public_url
+is set, and while
+.Li auth_methods.password
+is disabled.
+Whoever reads an account's mailbox can then take the account; on an instance
+with email PIN sign-in on, they already could.
+Default:
+.Dq disabled .
+.It Li public_url
+The address of this instance as a browser reaches it, such as
+.Dq https://signet.example.com ,
+for links in mail.
+It is never taken from a request, because a forged
+.Li Host
+would put an attacker's site in a real message.
+Links are this address, then
+.Va base_path ,
+then the page; with
+.Va base_path
+set, it must have no path of its own.
+Default: empty.
+.It Li second_factor
+.Dq optional
+or
+.Dq required .
+Optional, an account takes a second step only if it has an authenticator app,
+and a security key is asked to verify its user where it can: a key without a
+PIN signs in on possession alone.
+Required, every sign-in proves two factors:
+.Bl -bullet -compact
+.It
+a security key must verify its user, with a PIN or a fingerprint, both when it
+is added and at each sign-in, and then signs in by itself;
+keys that cannot, such as U2F-only keys, stop working;
+.It
+a password or a mailed PIN is followed by a code from the account's app, or,
+after a password with
+.Li email_pin
+listed, by a mailed PIN;
+.It
+an account whose second factor is a key is told to sign in with it;
+.It
+an account with none adds an app or a key, from those listed, before the
+sign-in finishes.
+Whoever has only its password can do that, so an administrator who wants
+better gives each new account a key first, with
+.Nm signet Cm webauthn-invite .
+.El
+The account page will not remove an account's last app or key.
+Default:
+.Dq optional .
+.It Li second_factor_methods
+What may follow a password or a mailed PIN, and what an account may add:
+.Dq totp ,
+.Dq webauthn
+and
+.Dq email_pin .
+Each one listed must be enabled in
+.Li auth_methods
+while
+.Li second_factor
+is required.
+.Dq email_pin
+is allowed, and
+.Cm serve
+warns about it: password recovery is by mail too, so whoever holds the mailbox
+can sign in with it alone.
+NIST SP 800-63B \(sc5.1.3.3 does not accept email as a second factor.
+Default:
+.Li [totp, webauthn] .
+.It Li totp_issuer
+The name an authenticator app shows for a key.
+It cannot contain a colon.
+Default:
+.Dq Signet .
+.It Li account_reauth_window
+Seconds a sign-in counts as recent.
+An older session can see
+.Pa /account
+and
+.Pa /webauthn/keys ,
+but must sign in again before changing anything there.
+Default: 600.
+.It Li recovery_link_ttl
+Seconds a recovery link works.
+Default: 3600.
+.It Li mail_link_rate_limit , mail_link_rate_window
+Messages with a link per address, and the window in seconds.
+Over the limit the reply does not change and no message goes out.
+Default: 3 per 3600.
+.It Li mail_link_source_rate_limit , mail_link_source_rate_window
+The same per client address.
+Default: 10 per 3600.
+.It Li avatars
+.Dq enabled
+lets each account set a picture on
+.Pa /account ,
+serves it at
+.Pa /avatar/<id>
+and names it in
+.Pa /session
+and
+.Pa /api/v1/validate .
+A change needs a recent sign-in and mails no notice.
+The web server must route
+.Pa /avatar/ .
+Default:
+.Dq disabled .
+.It Li avatar_size
+The side of a picture in pixels, from 32 to 512.
+The account page crops and scales to it, and an upload of any other size is
+refused.
+Pictures already stored keep their size.
+Default: 256.
+.It Li avatar_rate_limit , avatar_rate_window
+New pictures per account, and the window in seconds.
+Default: 10 per 3600.
+.El
+.Pp
+The following fields control rate limiting.
+The counts are kept in memory, by each
+.Xr signet 1
+process: instances that share a
+.Va csv_path
+and
+.Va database_path
+each count on their own, so
+.Ar n
+of them allow
+.Ar n
+times each limit.
+A restart or a
+.Dv SIGHUP
+reload starts the counts over.
+The lockout under
+.Va account_lockout_threshold
+is kept in the database instead, and shared.
+.Bl -tag -width Ds
+.It Li login_address_limit
+Whether failed passwords are counted per address:
+.Dq enabled
+or
+.Dq disabled .
+It stops guessing at one account, but anyone who knows an address can block
+its password login until the window passes.
+Other sign-in methods are not affected.
+Default:
+.Dq enabled .
+.It Li login_rate_limit
+Maximum number of failed password attempts per address within the rate window.
+An attempt counts from when it starts, so attempts sent together get no more
+than this; a success gives its count back and clears the rest.
+Must be greater than 0 while the limit is enabled.
+Default: 5.
+.It Li login_rate_window
+Rate window in seconds for login attempts.
+Default: 300 (5 minutes).
+.It Li login_source_limit
+Whether failed passwords are counted per client address:
+.Dq enabled
+or
+.Dq disabled .
+It stops one source trying a password across every account.
+A client over the limit is refused even with the right password, and signing
+in does not clear the count.
+Behind a proxy,
+.Va trusted_proxies
+must list it, or all clients share this budget and one of them can block
+everyone.
+Default:
+.Dq enabled .
+With both this and
+.Va login_address_limit
+disabled,
+.Cm serve
+warns that nothing limits password guessing.
+.It Li login_source_rate_limit
+Maximum number of failed password attempts per client address within the
+window.
+Must be greater than 0 while the limit is enabled.
+Default: 20.
+.It Li login_source_rate_window
+Rate window in seconds for the limit per client address.
+Default: 300 (5 minutes).
+.It Li account_lockout_threshold
+How many failed sign-ins in a row lock an account, so that guessing stops there
+.Pq NIST SP 800-63B \(sc5.2.2 .
+Wrong passwords, emailed PINs and TOTP or recovery codes count,
+for accounts that
+exist; the count is in the database, so instances sharing it share it and a
+restart keeps it.
+Only a finished sign-in clears it: a right password still waiting for its code
+does not.
+While locked, those methods refuse without checking, with the same answer as a
+wrong password, and the owner gets a notice by mail.
+A security key still signs in, and password recovery,
+.Cm signet user-unlock
+or a finished sign-in ends the lock.
+When the lock ends, one more failure locks again.
+0 switches it off.
+Default: 100.
+.It Li account_lockout_duration
+Minutes a lock by
+.Va account_lockout_threshold
+lasts.
+The email PIN lockout is separate and fixed: three wrong guesses against an
+address stop PIN sign-in for it for 30 minutes.
+Default: 30.
+.It Li email_rate_limit
+Maximum number of email PIN requests within the rate window, counted separately
+per requester and per target address, and of PIN checks per requester.
+Default: 3.
+.It Li email_rate_window
+Rate window in seconds for email PIN requests.
+Default: 60.
+.It Li webauthn_rate_limit
+Security key ceremony steps allowed per requester in the window.
+A sign-in takes two steps.
+It is counted per requester and never per address,
+so that nobody can lock a user
+out of their own key.
+Default: 30.
+.It Li webauthn_rate_window
+Window in seconds for
+.Li webauthn_rate_limit .
+Default: 60.
+.It Li register_rate_limit
+Valid self-registration attempts allowed per requester in the window, with
+.Va email_verification
+disabled.
+With it required, the
+.Va mail_link
+limits apply.
+A request refused for a bad address or password does not count.
+Default: 5.
+.It Li register_rate_window
+Window in seconds for
+.Li register_rate_limit .
+Default: 3600.
+.It Li api_rate_limit
+Maximum number of API requests within the rate window.
+Default: 60.
+.It Li api_rate_window
+Rate window in seconds for API requests.
+Default: 60.
+.El
+.Pp
+The following fields control logging:
+.Bl -tag -width Ds
+.It Li log_level
+Not implemented yet: every level is logged.
+Log level:
+.Dq debug ,
+.Dq info ,
+.Dq warn ,
+.Dq error .
+Default:
+.Dq info .
+.It Li log_syslog
+If true, log to syslog instead of standard output.
+An error that stops the server goes to standard error and syslog whatever this
+says, since the configuration itself may be what failed.
+Under
+.Xr systemd 1 ,
+everything goes to standard output and standard error for the journal to
+collect,
+and this setting has no effect.
+Default: false.
+.El
+.Pp
+The following fields say where WebAuthn applies.
+.Va auth_methods.webauthn
+switches it on; if these are missing or invalid, it stays off with a warning in
+the log.
+The older
+.Li webauthn_enabled
+key is deprecated: false still turns WebAuthn off, and
+.Ic serve
+warns about it.
+.Bl -tag -width Ds
+.It Li webauthn_rpid
+WebAuthn Relying Party ID: a domain name, not an IP address.
+Required for WebAuthn; no default.
+.It Li webauthn_rp_name
+WebAuthn Relying Party display name.
+Default:
+.Dq Signet .
+.It Li webauthn_origins
+List of allowed origins for WebAuthn: the exact scheme, host and port of the
+page.
+Browsers offer security keys only in a secure context, which means HTTPS or
+.Li localhost .
+The first entry is the default origin for
+.Cm signet webauthn-invite
+links.
+Required for WebAuthn; no default.
+.El
+.Pp
+The following field controls where signet may send the browser after login:
+.Bl -tag -width Ds
+.It Li allowed_redirect_hosts
+List of hostnames a cross-host login redirect may target.
+A browser on a listed host may also send signet state-changing requests, which
+are otherwise refused from any other origin.
+Return locations come from the posted
+.Va referrer
+field, the
+.Cm ?referrer=
+query parameter or the HTTP
+.Ev Referer
+header.
+Local paths and URLs on the request host are always accepted without being
+listed; an absolute URL on a different host is honoured only when its hostname
+appears here.
+An entry matches the target hostname case-insensitively;
+without a port it accepts the scheme's default port only,
+with a port it accepts that port only.
+IP addresses are valid entries.
+IPv6 addresses may be written in full or minified form and match either
+spelling in the URL; bracket them
+.Pq Li [fd00::5] No / Li [fd00::5]:9443
+to carry a port.
+Default: empty, so cross-host redirects are refused.
+This lets applications protected by signet, e.g. through
+.Cm forward_auth ,
+send users back after they sign in.
+.El
+.Pp
+The mail configuration.
+Signet speaks no mail protocol: like
+.Xr mail 1 ,
+it runs
+.Xr sendmail 8
+and leaves delivery, and what may be delivered where, to the system's mail
+infrastructure.
+.Bl -tag -width Ds
+.It Li mail.program
+The program to run, as
+.Li program -i [-f from_address] \-\- recipient
+with the message on standard input.
+If it exits with a failure, or does not finish within 30 seconds, the failure is
+logged.
+If empty, messages are written to the process log instead of being sent, PINs
+included, and
+.Xr signet 1
+warns at startup; only use that for development.
+Default:
+.Pa /usr/sbin/sendmail .
+.It Li mail.from_address
+The sender's address, used for both the envelope and the
+.Dq From
+header.
+It must be able to receive mail, because bounces go to it: if it cannot,
+a message that
+fails after being queued is lost, and signet only ever learns that it was
+queued.
+If empty, the mail system fills it in.
+Default: empty.
+.It Li mail.from_name
+The sender's display name, used only with
+.Li mail.from_address .
+Default:
+.Dq Signet .
+.El
+.Pp
+The external claims hook configuration; the program's protocol is in
+.Xr signet-hooks 5 :
+.Bl -tag -width Ds
+.It Li claims_hook.enabled
+Whether the external claims hook is enabled.
+Default: false.
+.It Li claims_hook.program
+Path to the claims hook program.
+Default: empty.
+.It Li claims_hook.timeout_seconds
+Timeout in seconds for the claims hook.
+Default: 5.
+.It Li claims_hook.on_failure
+Behavior when the claims hook fails.
+Must be
+.Dq fail-closed
+or
+.Dq fail-open .
+Default:
+.Dq fail-closed .
+.It Li claims_hook.refresh_rate_limit
+Hook runs that
+.Li GET /session?claims=refresh
+may start per account within the refresh window.
+Past it the stored claims are answered, and the refusal is logged.
+Must be greater than 0.
+Default: 6.
+.It Li claims_hook.refresh_rate_window
+Window in seconds for
+.Li claims_hook.refresh_rate_limit .
+Default: 60.
+.El
+.Pp
+The cookie configuration:
+.Bl -tag -width Ds
+.It Li cookie_name
+Name of the authentication cookie.
+Each instance on a host needs its own.
+Default:
+.Dq signetid .
+.It Li cookie_domain
+Cookie domain.
+If empty, the cookie is scoped to the current host.
+Default: empty.
+.It Li cookie_max_age
+Cookie and session lifetime in seconds.
+Default: 86400 (24 hours).
+.It Li cookie_secure
+Whether the cookie carries the
+.Dq Secure
+attribute.
+Set it to false only for plain-HTTP test deployments; otherwise browsers drop
+the cookie.
+Default: true.
+.It Li cookie_secret
+Key that signs session cookies, at least 32 characters.
+Required by
+.Cm signet serve ,
+which refuses to start without it; other commands do not read it.
+Generate one with
+.Dl openssl rand -hex 32
+Instances sharing a database must use the same value, or each rejects the
+other's cookies.
+Changing it signs everyone out.
+.Cm serve
+logs a warning when this file is world-readable.
+.El
+.Pp
+The
+.Va auth_methods
+field controls which authentication methods are enabled:
+.Pp
+.Dl auth_methods:
+.Dl   password: enabled
+.Dl   webauthn: disabled
+.Dl   email_pin: enabled
+.Dl   totp: disabled
+.Pp
+Each value must be
+.Dq enabled
+or
+.Dq disabled .
+Setting
+.Li password
+to
+.Dq disabled
+makes
+.Cm POST /login
+answer 403.
+With
+.Li totp
+enabled, people can add authenticator apps on
+.Pa /account ,
+and an account with one needs a code after a password or an emailed PIN.
+A security key signs in alone.
+Disabling it stops both, so such an account then signs in with no code, and
+.Cm serve
+warns if keys exist.
+The keys are encrypted with a key derived from
+.Va cookie_secret ,
+so changing that makes them all unreadable, and people must add them again.
+The enabled methods are exposed to the login template as
+.Va .PasswordEnabled ,
+.Va .WebAuthnEnabled ,
+.Va .EmailPINEnabled
+and
+.Va .TOTPEnabled ;
+see
+.Xr signet-template 5 .
+.Sh CSV FILE FORMAT
+The CSV file at
+.Va csv_path
+contains user accounts in the following format:
+.Pp
+.Dl email,password_hash,hash_algorithm,flags,otp_secret
+.Bl -bullet -offset indent
+.It
+Each line represents one user.
+.It
+Lines starting with
+.Dq #
+are comments and are ignored.
+Comments, blank lines and rows with too few fields are kept when
+.Xr signet 1
+rewrites the file.
+.It
+The
+.Va password_hash
+column holds the password hash, or
+.Dq !
+for an account without a password.
+.It
+The
+.Va hash_algorithm
+column must be
+.Dq bcrypt
+or
+.Dq argon2id .
+.It
+The
+.Va flags
+column is a pipe-delimited list of flags:
+.Bl -dash -offset indent
+.It
+.Dq self_registered
+\- user self-registered
+.It
+.Dq approved
+\- user has been approved; an account with
+.Dq self_registered
+and without this flag cannot sign in while
+.Va self_registration_approval
+is
+.Dq required
+.It
+.Dq mfa_enabled
+\- multi-factor authentication is enabled
+.It
+.Dq locked
+\- account cannot sign in by any method; existing sessions stay valid until
+they expire
+.El
+.It
+The
+.Va otp_secret
+column is unused: TOTP keys are in the database.
+It may be omitted.
+.It
+A new file is created readable by its owner only.
+Addresses cannot contain whitespace or control characters, or start with
+.Dq # .
+.El
+.Sh EXAMPLES
+A minimal configuration:
+.Pp
+.Dl listen: :9090
+.Dl cookie_secret: <output of openssl rand -hex 32>
+.Pp
+A full configuration:
+.Pp
+.D1 in
+.Bd -literal -offset indent
+listen: ":9090"
+socket_mode: "0660"
+cookie_secret: "<output of openssl rand -hex 32>"
+templates_dir: "/etc/signet/templates"
+static_dir: "/etc/signet/static"
+database_path: "/var/lib/signet/sessions.db"
+csv_path: "/var/lib/signet/users.csv"
+
+password_hash_algorithm: "argon2id"
+bcrypt_cost: 12
+argon2id_time: 1
+argon2id_memory: 65536
+argon2id_parallelism: 4
+argon2id_salt_length: 16
+argon2id_key_length: 32
+
+self_registration: "disabled"
+self_registration_approval: "required"
+email_verification: "required"
+multi_device: "enabled"
+password_recovery: "disabled"
+# public_url: "https://signet.example.com"
+# base_path: "/comments-auth"
+
+login_address_limit: "enabled"
+login_rate_limit: 5
+login_rate_window: 300
+login_source_limit: "enabled"
+login_source_rate_limit: 20
+login_source_rate_window: 300
+account_lockout_threshold: 100
+account_lockout_duration: 30
+
+
+webauthn_rpid: "signet.example.com"
+webauthn_rp_name: "Signet"
+webauthn_origins:
+  - "https://signet.example.com"
+
+allowed_redirect_hosts:
+  - "app.example.com"
+
+mail:
+  from_address: "noreply@signet.example.com"
+
+claims_hook:
+  enabled: false
+
+log_level: "info"
+log_syslog: false
+.Ed
+.Sh SEE ALSO
+.Xr signet 1 ,
+.Xr signet-hooks 5 ,
+.Xr signet-template 5 ,
+.Xr sendmail 8
+.Sh HISTORY
+The
+.Nm
+configuration format was introduced in 2026.

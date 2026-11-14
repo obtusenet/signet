@@ -1,0 +1,170 @@
+# Signet Configuration
+
+# Server
+# listen shapes: "1.2.3.4:9000" | "[::]:9000" | ":9000" (TCP),
+# "/absolute/path.sock" (HTTP over a unix socket), or pair a path with
+# protocol: "fastcgi" for FastCGI (nginx, httpd — see examples/web-servers/).
+listen: ":8080"
+protocol: "http"        # "http" or "fastcgi"
+socket_mode: "0660"     # octal mode of the socket file when listen is a path
+
+# Templates & Static
+templates_dir: "/usr/local/etc/signet/templates"
+static_dir: "/usr/local/etc/signet/static"
+
+# Cookie
+cookie_name: "signetid"
+cookie_domain: ""          # empty = browser default
+cookie_max_age: 86400      # seconds (24 hours)
+cookie_secure: true        # false only for plain-HTTP testing
+# Signs session cookies.  Required by `signet serve`, at least 32 characters:
+#   openssl rand -hex 32
+# Every instance sharing this database must use the same value; changing it
+# signs everyone out.  Keep this file unreadable by other users.
+cookie_secret: ""
+
+# Database
+database_path: "/var/db/signet/sessions.db"
+
+# CSV Backend
+csv_path: "/var/db/signet/users.csv"
+
+# Password Hashing
+password_hash_algorithm: "argon2id"   # or "bcrypt"
+bcrypt_cost: 12
+argon2id_time: 1
+argon2id_memory: 65536    # 64 MB
+argon2id_parallelism: 4
+argon2id_salt_length: 16
+argon2id_key_length: 32
+
+# User Management
+self_registration: "disabled"              # or "enabled"
+self_registration_approval: "required"     # or "auto_approve"
+# "required" creates an account only from a link in mail, with the password chosen
+# there, and registration stays off until public_url is set.  "disabled" creates it at
+# once: nothing proves the address, and replies show which addresses have accounts.
+email_verification: "required"             # or "disabled"
+registration_link_ttl: 86400               # seconds a registration link works
+# not implemented, ignored
+multi_device: "enabled"
+password_recovery: "disabled"              # or "enabled"; stays off until public_url is set
+# This instance as a browser reaches it, for links in mail.  Never taken from a request.
+# public_url: "https://signet.example.com"
+# Serve every route under this path, so instances can share a host: the login page
+# is then /comments-auth/login.  The web server passes the path whole.  Instances
+# on one host need different cookie_name values.
+# base_path: "/comments-auth"
+totp_issuer: "Signet"                      # the name an authenticator app shows
+account_reauth_window: 600                 # how recent a sign-in must be to change the account
+# A picture per account, set on /account and named in /session as "avatar".  The web
+# server must route /avatar/.  Uploads must be avatar_size pixels square (32 to 512);
+# the page crops and scales to it.
+avatars: "disabled"                        # or "enabled"
+avatar_size: 256
+avatar_rate_limit: 10                      # new pictures per account
+avatar_rate_window: 3600
+recovery_link_ttl: 3600                    # seconds a recovery link works
+mail_link_rate_limit: 3                    # messages with a link, per address
+mail_link_rate_window: 3600
+mail_link_source_rate_limit: 10            # the same, per client address
+mail_link_source_rate_window: 3600
+
+# Security
+# Failed passwords, per address.  It stops guessing at one account, but anyone who
+# knows an address can block its password login.  Other sign-in methods still work.
+login_address_limit: "enabled"             # or "disabled"
+login_rate_limit: 5
+login_rate_window: 300                     # 5 minutes
+# Failed passwords, per client address.  It stops one source trying a password
+# across every account.  Behind a proxy, trusted_proxies must list it, or all
+# clients share this budget and one of them can block everyone.
+login_source_limit: "enabled"              # or "disabled"
+login_source_rate_limit: 20
+login_source_rate_window: 300              # 5 minutes
+# After this many failed sign-ins in a row (passwords, PINs and codes), those are
+# refused for account_lockout_duration minutes; a passkey, recovery or
+# `signet user-unlock` still gets in.  0 switches it off.  PIN lockout is separate.
+account_lockout_threshold: 100
+account_lockout_duration: 30               # minutes
+email_rate_limit: 3
+email_rate_window: 60                      # 1 minute per email address
+webauthn_rate_limit: 30                    # ceremony steps per requester; a sign-in takes 2
+webauthn_rate_window: 60
+register_rate_limit: 5                     # valid registrations per requester
+register_rate_window: 3600
+# Peers whose X-Forwarded-For is believed, so a proxy must be listed here or every
+# client shares its rate-limit budget: IP addresses, CIDR ranges, or "unix" for a
+# web server on the socket. Not needed for FastCGI. Default: empty.
+trusted_proxies: []
+
+# Login redirects
+# Hostnames a login may redirect back to when the return location is an
+# absolute URL on a different host (applications protected through signet,
+# e.g. via Caddy forward_auth).  Local paths and same-host URLs always work
+# without listing.  An entry matches case-insensitively; without a port it
+# accepts the scheme's default port only, with a port that port only.
+# Default: empty, so cross-host redirects are refused.
+allowed_redirect_hosts:
+  - "app.example.com"
+
+# Email
+# Signet hands messages to the system's mail infrastructure, like mail(1).
+mail:
+  program: "/usr/sbin/sendmail"    # empty writes messages, PINs included, to the log
+  # Bounces go here, so it must be able to receive mail. Empty leaves it to the mail system.
+  from_address: "noreply@signet.local"
+  from_name: "Signet"
+
+# External Claims Hook
+claims_hook:
+  enabled: false
+  program: "/usr/local/bin/signet-claims"
+  timeout_seconds: 5
+  on_failure: "fail-closed"   # or "fail-open"
+  # Hook runs by GET /session?claims=refresh per account in the window;
+  # past it the stored claims are answered.
+  refresh_rate_limit: 6
+  refresh_rate_window: 60
+
+# API
+api_rate_limit: 60
+api_rate_window: 60
+
+# Logging
+log_level: "info"    # not implemented yet: every level is logged
+log_syslog: true      # through syslog to /var/log/signet.log
+
+# WebAuthn: set these, then enable auth_methods.webauthn.  The RP ID is a domain name,
+# not an IP address, and browsers need HTTPS or localhost.
+# webauthn_rpid: "signet.example.com"
+# webauthn_rp_name: "Signet"
+# webauthn_origins:
+#   - "https://signet.example.com"
+
+# Auth Methods (feature toggles)
+auth_methods:
+  password: "enabled"
+  webauthn: "disabled"      # needs webauthn_rpid and webauthn_origins
+  email_pin: "enabled"
+  totp: "disabled"          # asks accounts with a key for a code after a password or a PIN
+
+# "optional": an account with an authenticator app is asked for a code, and a
+# security key without a PIN signs in alone.  "required": every sign-in proves
+# two factors.  A key must check a PIN or fingerprint, a password or mailed PIN
+# is followed by a code (or a mailed PIN after a password, with email_pin listed),
+# and an account with neither adds one before the sign-in finishes.
+second_factor: "optional"
+# What may follow a password or PIN, and may be added.  Each must be enabled
+# above.  email_pin is allowed but weak: recovery is by mail too, so the mailbox
+# alone signs in (NIST SP 800-63B 5.1.3.3).
+second_factor_methods: ["totp", "webauthn"]
+
+# RADIUS (uncomment when ready)
+# backend:
+#   type: "radius"
+#   radius:
+#     servers:
+#       - host: "radius.example.com"
+#         port: 1812
+#         secret: "shared_secret"
