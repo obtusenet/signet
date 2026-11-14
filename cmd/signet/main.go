@@ -35,7 +35,7 @@ import (
 var (
 	gitHash   = "unknown"
 	buildTime = "unknown"
-	version   = "0.14.0"
+	version   = "0.14.1"
 	// defaultConfig is where commands look without -config.  Packages set it at link
 	// time (-X main.defaultConfig=/etc/signet/config.yaml); a plain build reads the
 	// current directory.

@@ -8,7 +8,7 @@ passwords, security keys (WebAuthn), mailed PINs and TOTP, and issues one sessio
 cookie that applications check through `/session` or `/api/v1/validate`. It is not
 an OIDC or OAuth provider. `README.md` explains the difference.
 
-**Version:** 0.14.0
+**Version:** 0.14.1
 
 ## Where things are
 
