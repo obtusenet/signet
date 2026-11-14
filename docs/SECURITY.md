@@ -5,7 +5,13 @@ behind it. Please report a suspected vulnerability privately.
 
 ## Reporting
 
-Send mail to **code@obtusenet.com** with "signet security" in the subject. Include:
+Use either:
+
+- GitHub's private vulnerability reporting: **Report a vulnerability** on the
+  [Security tab](https://github.com/obtusenet/signet/security);
+- mail to **code@obtusenet.com** with "signet security" in the subject.
+
+Include:
 
 - the version (`signet version`) and how it is deployed: web server, transport
   (HTTP, socket or FastCGI), and which sign-in methods are on;
@@ -14,9 +20,6 @@ Send mail to **code@obtusenet.com** with "signet security" in the subject. Inclu
 
 Don't open a public issue or pull request for a vulnerability until a fix is
 released.
-
-GitHub's private vulnerability reporting ("Report a vulnerability" on the Security
-tab), if the repository has it switched on, works too.
 
 ## What to expect
 
