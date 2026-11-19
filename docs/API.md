@@ -1,6 +1,6 @@
 # Signet HTTP API
 
-Version: 0.14.2  
+Version: 0.15.0  
 Audience: a developer or an automated agent writing a client, a backend
 integration, or a reverse-proxy configuration against signet.
 

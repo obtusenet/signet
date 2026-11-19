@@ -1,3 +1,9 @@
+signet (0.15.0-1) unstable; urgency=medium
+
+  * Release 0.15.0.
+
+ -- Code <code@obtusenet.com>  Thu, 19 Nov 2026 14:56:55 +0000
+
 signet (0.14.2-1) unstable; urgency=medium
 
   * Release 0.14.2.

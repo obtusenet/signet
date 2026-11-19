@@ -13,7 +13,7 @@
 
 set -eu
 
-VERSION="${VERSION:-0.14.2}"
+VERSION="${VERSION:-0.15.0}"
 DISTNAME="signet-${VERSION}"
 case "${1:-zip}" in
 zip | both) DISTFILE="${DISTNAME}.zip" ;;

@@ -13,8 +13,8 @@ below are the same thing by hand, for any other machine.
 ./distfile.sh
 ```
 
-It writes `dist/signet-0.14.2.zip` — the tracked source plus `vendor/`, under a
-single `signet-0.14.2/` top-level directory — and prints the `distinfo` entry.
+It writes `dist/signet-0.15.0.zip` — the tracked source plus `vendor/`, under a
+single `signet-0.15.0/` top-level directory — and prints the `distinfo` entry.
 Copy that entry into `www/signet/distinfo`.
 
 The zip layout matters twice over:
@@ -34,7 +34,7 @@ overrides `do-build` *and* `do-install` (the module's install target looks in
 
 ```sh
 doas cp -R contrib/packaging/openbsd/www/signet /usr/ports/www/
-doas cp dist/signet-0.14.2.zip /usr/ports/distfiles/
+doas cp dist/signet-0.15.0.zip /usr/ports/distfiles/
 ```
 
 The port's `SITES` is the GitHub release, where the zip is attached when the
@@ -59,7 +59,7 @@ cd /usr/ports/www/signet
 doas make package
 ```
 
-The result is `/usr/ports/packages/amd64/all/signet-0.14.2.tgz`. `make package`
+The result is `/usr/ports/packages/amd64/all/signet-0.15.0.tgz`. `make package`
 runs `go test ./...` first, in `do-build`.
 
 If the framework answers `Error: change in plist ... forgot to bump a
@@ -68,14 +68,14 @@ Either bump `REVISION` in the Makefile, or drop the stale records before
 rebuilding:
 
 ```sh
-doas rm -f /usr/ports/plist/amd64/signet-0.14.2{,-new} \
-	/usr/ports/packages/amd64/{all,ftp}/signet-0.14.2.tgz
+doas rm -f /usr/ports/plist/amd64/signet-0.15.0{,-new} \
+	/usr/ports/packages/amd64/{all,ftp}/signet-0.15.0.tgz
 ```
 
 ## 5. Install and enable
 
 ```sh
-doas pkg_add -Dunsigned /usr/ports/packages/amd64/all/signet-0.14.2.tgz
+doas pkg_add -Dunsigned /usr/ports/packages/amd64/all/signet-0.15.0.tgz
 ```
 
 The package config sample is `/etc/signet/config.yaml` (from
