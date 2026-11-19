@@ -543,6 +543,10 @@ not counted against the account.
 .Pp
 A RADIUS account has no password, PIN, recovery, registration or security key
 here; each answers as for an unknown address.
+Its only second factor is an app, whatever
+.Va second_factor_methods
+lists, and a server's challenge does not count toward
+.Va second_factor .
 With
 .Va second_factor
 .Dq required

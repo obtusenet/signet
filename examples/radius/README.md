@@ -104,6 +104,19 @@ Without a claims hook, a RADIUS account's session has the claims
 role, use a claims hook: `examples/hooks/radius-claims.py`, or
 `radius-claims.sh` for a host with only `sh` and `awk`, is a starting point.
 
+## Second factors
+
+A RADIUS account's only second factor in Signet is an authenticator app (TOTP).
+It can add, use and remove one on `/account`, and never a security key, a mailed
+PIN or recovery, whatever `second_factor_methods` lists; local accounts keep every
+method that is enabled. With `second_factor: "required"`, enable and list `totp`,
+or RADIUS accounts are refused.
+
+The server may have its own second factor, such as a token code asked with an
+Access-Challenge. Signet passes the prompt and the answer, but cannot see or manage
+that factor, and it does not count toward `second_factor`: under `"required"` such a
+user also adds an app, and answers two prompts.
+
 ## Names
 
 `users.csv` is asked first, so a local account with a RADIUS user's name signs in

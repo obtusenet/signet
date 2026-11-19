@@ -180,14 +180,6 @@ auth_methods:
 second_factor: "optional"
 # What may follow a password or PIN, and may be added.  Each must be enabled
 # above.  email_pin is allowed but weak: recovery is by mail too, so the mailbox
-# alone signs in (NIST SP 800-63B 5.1.3.3).
+# alone signs in (NIST SP 800-63B 5.1.3.3).  A RADIUS account takes only totp,
+# so list it when RADIUS is on and second_factor is required.
 second_factor_methods: ["totp", "webauthn"]
-
-# RADIUS (uncomment when ready)
-# backend:
-#   type: "radius"
-#   radius:
-#     servers:
-#       - host: "radius.example.com"
-#         port: 1812
-#         secret: "shared_secret"

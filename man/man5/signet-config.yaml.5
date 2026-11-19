@@ -728,12 +728,21 @@ off.
 A RADIUS name need not be a mail address; it is sent exactly as typed.
 A RADIUS account has no password here, no mailed PIN, recovery or security
 key, and gets no account-change notices.
-An authenticator app may follow its password as a second factor, as
+Its only second factor is an authenticator app: it never uses or adds a key
+or a mailed PIN, whatever
+.Li second_factor_methods
+lists, while local accounts keep every method enabled.
+An app follows its password as
 .Li second_factor
 says, and with
 .Li second_factor
 .Dq required
-it adds one at sign-in.
+it adds one at sign-in, so
+.Li totp
+must then be enabled and listed or RADIUS accounts are refused.
+A challenge from the server is the server's own factor, which Signet does not
+see or manage, and does not count toward
+.Li second_factor .
 .Bl -tag -width Ds
 .It Li radius.enabled
 Whether RADIUS checks names the CSV file lacks.

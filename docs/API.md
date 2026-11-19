@@ -418,7 +418,8 @@ name. `signet session-revoke <name>` ends a RADIUS account's sessions.
 - **No valid reply** from any server: `503`. Not counted against the account.
 
 A RADIUS account has no password, PIN, recovery, registration or security key here: those answer as
-for an unknown address. `/account` shows its apps and picture, and refuses a password change with
+for an unknown address. Its only second factor is an app (TOTP), whatever `second_factor_methods`
+lists, and a server's challenge does not count toward `second_factor`. `/account` shows its apps and picture, and refuses a password change with
 `403`.
 
 ### 4.8 `POST /email-pin/send`

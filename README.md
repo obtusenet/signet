@@ -271,8 +271,13 @@ is your mail system's decision.
 Names that `users.csv` does not have can sign in with a password that RADIUS servers
 check (RFC 2865, over UDP). A name in `users.csv` never goes to them. The reply's
 groups become the claim `groups`, or reach the claims hook. A server's challenge
-becomes one more step, and an authenticator app may follow as a second factor.
-`docs/DESIGN.md` says what such an account can and cannot do here. Because
+becomes one more step. A RADIUS account's only second factor here is an
+authenticator app (TOTP): it never uses or adds a security key, mailed PIN or
+recovery, whatever `second_factor_methods` lists, while local accounts keep every
+method enabled. With `second_factor: required`, `totp` must be enabled and listed,
+or RADIUS accounts cannot sign in. A challenge from the server is the server's own
+factor and does not count toward `second_factor`. `docs/DESIGN.md` says what such
+an account can and cannot do here. Because
 `users.csv` is asked first, a local account shadows a RADIUS one of the same name,
 including one self-registered for an address that is also a RADIUS name: keep
 the names apart, or keep self-registration off. `signet session-revoke` signs a

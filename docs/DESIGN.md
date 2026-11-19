@@ -143,7 +143,15 @@ A RADIUS backend for accounts is planned and not built.
   refresh sees what the sign-in saw: Signet cannot ask again without the password.
 - **The server's decision is final.** A RADIUS account has no password, mailed PIN,
   recovery or key here, since each would sign it in without the server and without
-  groups. An authenticator app may follow its password as a second factor.
+  groups.
+- **TOTP is a RADIUS account's only second factor.** It may add, use and remove an
+  authenticator app on `/account`, and nothing else, whatever
+  `second_factor_methods` lists; local accounts keep every enabled method. A key
+  as a step after a RADIUS password was considered and not taken. Under
+  `second_factor: required` a RADIUS account without an app adds one at sign-in, so
+  `totp` must be enabled and listed, or the account is refused. A server's
+  Access-Challenge is the server's own factor, which Signet can neither see nor
+  manage, and does not satisfy `second_factor`.
 - **Access-Challenge** becomes a step, like the code step: the server's prompt, one
   answer per challenge, sent with `State` to the server that asked.
 - **No answer fails closed** with `503`, and is not counted against the account.
@@ -232,5 +240,4 @@ A RADIUS backend for accounts is planned and not built.
 - `log_level`: every level is logged.
 - One session per account (`multi_device: disabled`).
 - RadSec (RADIUS over TLS, RFC 6614).
-- A security key as the second factor after a RADIUS password.
 - Rate limits shared between instances.
