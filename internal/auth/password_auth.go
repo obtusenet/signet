@@ -325,16 +325,26 @@ func (pa *PasswordAuth) CreateSessionFacts(ctx context.Context, email, method st
 		claimsJSON = []byte("{}")
 	}
 
+	// A RADIUS reply's timeouts replace Signet's for this session.
+	lifetime, idle := pa.maxAge, 0
+	if facts.Radius != nil {
+		if t := facts.Radius.SessionTimeout; t > 0 {
+			lifetime = int(t)
+		}
+		idle = int(facts.Radius.IdleTimeout)
+	}
+
 	// Create session
 	now := time.Now()
 	sess := &session.Session{
-		Token:      token,
-		UserEmail:  email,
-		AuthMethod: method,
-		Claims:     string(claimsJSON),
-		Facts:      facts.String(),
-		CreatedAt:  now,
-		ExpiresAt:  now.Add(time.Duration(pa.maxAge) * time.Second),
+		Token:       token,
+		UserEmail:   email,
+		AuthMethod:  method,
+		Claims:      string(claimsJSON),
+		Facts:       facts.String(),
+		CreatedAt:   now,
+		ExpiresAt:   now.Add(time.Duration(lifetime) * time.Second),
+		IdleTimeout: idle,
 	}
 
 	if err := pa.sessionStore.Create(ctx, sess); err != nil {
@@ -347,7 +357,7 @@ func (pa *PasswordAuth) CreateSessionFacts(ctx context.Context, email, method st
 	}
 
 	// Create auth cookie
-	authCookie := pa.cookieMgr.CreateAuthCookie(token)
+	authCookie := pa.cookieMgr.CreateAuthCookieFor(token, lifetime)
 	return authCookie, nil
 }
 

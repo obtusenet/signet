@@ -6,6 +6,7 @@ package session
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -268,5 +269,93 @@ func TestRewriteRunsOnceEvenAfterTheHashing(t *testing.T) {
 			t.Errorf("start %d: version 3 recorded %d times", i, done)
 		}
 		database.Close()
+	}
+}
+
+// create stores a session that signed in at created, for a day.
+func create(t *testing.T, s *Store, token string, created time.Time, idle int) {
+	t.Helper()
+	if err := s.Create(context.Background(), &Session{
+		Token: token, UserEmail: "a@example.com", AuthMethod: "password", Claims: "{}",
+		CreatedAt: created, ExpiresAt: created.Add(24 * time.Hour), IdleTimeout: idle,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func lastSeen(t *testing.T, s *Store, token string) int64 {
+	t.Helper()
+	var v int64
+	if err := s.db.QueryRow(`SELECT last_seen_unix FROM sessions WHERE token = ?`, HashToken(token)).Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func TestIdleTimeout(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	// Off, an old session lives to its expiry.
+	create(t, s, "old", now.Add(-3*time.Hour), 0)
+	if _, err := s.Get(ctx, "old"); err != nil {
+		t.Fatalf("without an idle limit: %v", err)
+	}
+
+	s.SetIdleTimeout(time.Hour)
+	if _, err := s.Get(ctx, "old"); !errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("idle three hours under a one-hour limit: %v", err)
+	}
+
+	// A use within the limit keeps it, and is written down once it is
+	// worth a write.
+	create(t, s, "busy", now.Add(-30*time.Minute), 0)
+	sess, err := s.Get(ctx, "busy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := lastSeen(t, s, "busy"); got < now.Unix() || sess.LastSeen.Unix() < now.Unix() {
+		t.Errorf("last use not written: %d", got)
+	}
+	written := lastSeen(t, s, "busy")
+	if _, err := s.Get(ctx, "busy"); err != nil {
+		t.Fatal(err)
+	}
+	if lastSeen(t, s, "busy") != written {
+		t.Error("a use seconds later was written again")
+	}
+
+	// A session's own limit wins over the store's, shorter or longer.
+	create(t, s, "short", now.Add(-10*time.Minute), 300)
+	if _, err := s.Get(ctx, "short"); !errors.Is(err, ErrSessionExpired) {
+		t.Errorf("own five-minute limit: %v", err)
+	}
+	create(t, s, "long", now.Add(-2*time.Hour), 4*3600)
+	if _, err := s.Get(ctx, "long"); err != nil {
+		t.Errorf("own four-hour limit: %v", err)
+	}
+}
+
+// Rows from before the columns existed count their sign-in as their last use.
+func TestIdleTimeoutOnOldRows(t *testing.T) {
+	s := newStore(t)
+	create(t, s, "row", time.Now().Add(-2*time.Hour), 0)
+	if _, err := s.db.Exec(`UPDATE sessions SET last_seen_unix = 0`); err != nil {
+		t.Fatal(err)
+	}
+	s.SetIdleTimeout(time.Hour)
+	if _, err := s.Get(context.Background(), "row"); !errors.Is(err, ErrSessionExpired) {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestTouchEvery(t *testing.T) {
+	for idle, want := range map[time.Duration]time.Duration{
+		time.Hour: time.Minute, 2 * time.Minute: 30 * time.Second, 10 * time.Minute: time.Minute,
+	} {
+		if got := touchEvery(idle); got != want {
+			t.Errorf("touchEvery(%v) = %v, want %v", idle, got, want)
+		}
 	}
 }

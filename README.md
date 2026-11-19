@@ -175,6 +175,7 @@ including a key it does not know, so a misspelt setting cannot go unnoticed.
 | `cookie_name` | `signetid` | Instances on one host need different names |
 | `cookie_domain` | empty | Empty for the host only, or a parent domain to share the cookie with subdomains |
 | `cookie_max_age` | `86400` | Session lifetime |
+| `session_idle_timeout` | `0` | Seconds without a use before a session ends; 0 never |
 | `cookie_secure` | `true` | Set `false` only for plain-HTTP testing |
 
 ### Storage
@@ -281,6 +282,7 @@ becomes one more step, and an authenticator app may follow as a second factor.
 | `radius.timeout_seconds`, `radius.retries` | `3`, `2` | Per try, and more tries per server |
 | `radius.group_attributes` | `[Filter-Id]` | The reply attributes that are groups: `Filter-Id`, `Class`, a number, or `vendor:<id>:<type>` |
 | `radius.require_message_authenticator` | `true` | Drop replies without one (CVE-2024-3596) |
+| `radius.max_session_timeout`, `radius.max_idle_timeout` | `0` | The most a reply's `Session-Timeout` and `Idle-Timeout` may set; 0 is `cookie_max_age` and `session_idle_timeout`, so a server can only shorten a session until these are raised |
 
 ### Logging
 

@@ -18,3 +18,8 @@ bob	NAS-Identifier == "blog", Cleartext-Password := "bob-pw"
 # A name that is a mail address, with its group in Class.
 "jane@example.com"	Cleartext-Password := "jane-pw"
 	Class := "staff"
+
+# Its own session limits: ten minutes, two of them idle.
+timed	Cleartext-Password := "timed-pw"
+	Session-Timeout := 600,
+	Idle-Timeout := 120

@@ -39,6 +39,12 @@ func NewCookieManager(name, domain string, maxAge int, secret []byte) *CookieMan
 
 // CreateAuthCookie creates a new auth cookie with a random token
 func (cm *CookieManager) CreateAuthCookie(sessionToken string) *http.Cookie {
+	return cm.CreateAuthCookieFor(sessionToken, cm.MaxAge)
+}
+
+// CreateAuthCookieFor is CreateAuthCookie for a session that lasts maxAge
+// seconds instead of cookie_max_age.
+func (cm *CookieManager) CreateAuthCookieFor(sessionToken string, maxAge int) *http.Cookie {
 	// Sign the token with the secret
 	signature := cm.sign(sessionToken)
 
@@ -49,7 +55,7 @@ func (cm *CookieManager) CreateAuthCookie(sessionToken string) *http.Cookie {
 		Value:    cookieValue,
 		Path:     "/",
 		Domain:   cm.Domain,
-		MaxAge:   cm.MaxAge,
+		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   cm.Secure,
 		SameSite: http.SameSiteStrictMode,

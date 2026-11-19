@@ -97,6 +97,16 @@ Text, integers and addresses are in
 .Li value ;
 anything else is in
 .Li hex .
+.It Li session_timeout , idle_timeout
+The reply's
+.Li Session-Timeout
+and
+.Li Idle-Timeout ,
+in seconds, as far as
+.Li radius.max_session_timeout
+and
+.Li radius.max_idle_timeout
+let them count; absent when the reply had none.
 .El
 .El
 .Pp

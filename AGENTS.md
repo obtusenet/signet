@@ -114,6 +114,11 @@ need `TESTBOX` or `FBSDBOX` as `user@host`, given on the command line or in
 
 ## Behaviour that must not regress
 
+- **RADIUS:** a name `users.csv` has never goes to a RADIUS server. Every request
+  carries `Message-Authenticator`, and a reply without a valid one is dropped
+  unless `require_message_authenticator: false`. An MS-CHAPv2 Accept must prove
+  the server knew the password. No answer fails closed (`503`). A RADIUS account
+  never signs in by a key, a mailed PIN or recovery.
 - **Failures:** each JSON endpoint answers with a status code that describes the
   failure and a JSON body. `POST /login` gives a plain form a 302, and
   `Accept: application/json` gets JSON. Never mix the two.

@@ -60,6 +60,8 @@ a binary keeps the library it was built with.
   `contrib/` and `deploy/`.
 - The sample web-server configurations in `examples/web-servers/`, where they
   would expose a deployment that follows them.
+- The RADIUS client, including what it accepts as a reply, and the examples in
+  `examples/radius/` and `examples/hooks/`.
 
 ## Out of scope
 
@@ -72,7 +74,9 @@ a binary keeps the library it was built with.
   it in a way that makes it exploitable. Report those upstream. `make vuln` runs
   `govulncheck` on the built binary.
 - Limits that are documented, such as rate limits counted per process
-  (`docs/DESIGN.md`).
+  (`docs/DESIGN.md`), or what PAP over UDP and MS-CHAPv2 expose on the network
+  path to a RADIUS server.
+- A RADIUS server's own decisions: Signet trusts a valid Access-Accept.
 
 ## The code was written by AI
 

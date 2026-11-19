@@ -32,7 +32,7 @@ portlint leaves two warnings: no `WWW` (signet has no public page) and
 | `/usr/local/share/signet/web` | the web files as shipped |
 | `/var/db/signet` | database and `users.csv`, `0750 signet` |
 | `/var/log/signet.log` | the log, through `syslog.d/signet.conf`; `newsyslog.conf.d/signet.conf` rotates it |
-| `/usr/local/share/examples/signet` | claims hooks and web-server samples |
+| `/usr/local/share/examples/signet` | claims hooks, web-server samples, and a FreeRADIUS guide |
 
 The user and group are `signet`, id 784: 906, OpenBSD's, is `opentsdb` here.
 
@@ -47,8 +47,8 @@ The user and group are `signet`, id 784: 906, OpenBSD's, is `opentsdb` here.
   the Debian package, which restarts it.
 - **Removal** stops the service (not during an upgrade, `PKG_UPGRADE`), and keeps an
   edited config, the web files' working copies and `/var/db/signet`.
-- The Python example hook is installed not executable, so Python is not a dependency:
-  run it as `python3 claims-hook.py`.
+- The Python example hooks are installed not executable, so Python is not a dependency:
+  run them as `python3 claims-hook.py`. `radius-claims.sh` needs only `sh` and `awk`.
 
 ## Releases
 

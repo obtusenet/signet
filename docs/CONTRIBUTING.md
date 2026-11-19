@@ -22,7 +22,8 @@ issue or pull request.
 
    `make test` must pass. Add a test for what you change. If you touch the
    package or Docker paths and have the tools, run the matching target:
-   `make test-docker`, `make test-linux` or `make test-deb`.
+   `make test-docker`, `make test-linux` or `make test-deb`. For the RADIUS
+   client, `make test-radius` runs Signet against FreeRADIUS in Docker.
 3. **Update the documentation in the same change.** Each change that alters
    behaviour updates the matching places:
    - the manual page (`man/`);

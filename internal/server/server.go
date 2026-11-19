@@ -157,6 +157,7 @@ func New(cfg *config.Config, logger *logging.Logger, dbStore *db.DB, backend *cs
 
 	// Initialize session store
 	s.sessionStore = session.NewStore(dbStore.DB())
+	s.sessionStore.SetIdleTimeout(time.Duration(cfg.SessionIdleTimeout) * time.Second)
 
 	if cfg.BasePath != "" {
 		logger.Info(fmt.Sprintf("serving every route under base_path %s", cfg.BasePath))

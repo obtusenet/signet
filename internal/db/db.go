@@ -148,6 +148,18 @@ func migrate(database *sql.DB) error {
 		return fmt.Errorf("adding the facts column: %w", err)
 	}
 
+	// A session's own idle limit (from a RADIUS reply) and its last use, for
+	// session_idle_timeout.  0 means none, and never used since sign-in.
+	for _, stmt := range []string{
+		`ALTER TABLE sessions ADD COLUMN idle_timeout INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE sessions ADD COLUMN last_seen_unix INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := tx.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			tx.Rollback()
+			return fmt.Errorf("adding the idle columns: %w", err)
+		}
+	}
+
 	if err := hashSessionTokens(tx); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("hashing session tokens: %w", err)

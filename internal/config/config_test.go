@@ -497,3 +497,35 @@ func TestRadiusSettings(t *testing.T) {
 		t.Errorf("off: %v", err)
 	}
 }
+
+func TestSessionIdleTimeoutAndRadiusCeilings(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.SessionIdleTimeout != 0 {
+		t.Errorf("idle timeout on by default: %d", cfg.SessionIdleTimeout)
+	}
+	if s, i := cfg.RadiusCeilings(); s != cfg.CookieMaxAge || i != cfg.CookieMaxAge {
+		t.Errorf("default ceilings %d, %d", s, i)
+	}
+	cfg.SessionIdleTimeout = 900
+	if _, i := cfg.RadiusCeilings(); i != 900 {
+		t.Errorf("idle ceiling %d, want session_idle_timeout", i)
+	}
+	cfg.Radius.MaxSessionTimeout, cfg.Radius.MaxIdleTimeout = 7200, 1800
+	if s, i := cfg.RadiusCeilings(); s != 7200 || i != 1800 {
+		t.Errorf("set ceilings %d, %d", s, i)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	for _, bad := range []string{
+		"session_idle_timeout: -1\n",
+		"radius: {enabled: true, nas_identifier: wiki, max_idle_timeout: -1, servers: [{address: a, secret: x}]}\n",
+	} {
+		if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadConfig(path); err == nil {
+			t.Errorf("%q loaded", bad)
+		}
+	}
+}

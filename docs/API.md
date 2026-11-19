@@ -15,6 +15,8 @@ man-page form is `signet-api(7)`.
   `signetid` and can describe the session behind it.
 - Sign in: `POST /login` (form-encoded) with `email`, `password` and an optional
   `referrer`. Send `Accept: application/json` to receive JSON instead of a 302.
+  With RADIUS on, `email` may be a plain name, which RADIUS servers check
+  (section 4.7e); such an account's `email` in `/session` is empty.
 - Ask about a session: `GET /session` → `200 {"valid":true,...}` or
   `401 {"valid":false,...}`.
 - Sign out: `GET` or `POST /logout` → deletes the session, expires the cookie.
@@ -84,7 +86,12 @@ Set-Cookie: signetid=<token>:<signature>; Path=/; Max-Age=86400; HttpOnly; SameS
   admits nobody. Sessions survive a restart, and instances sharing a
   database accept each other's cookies when they use the same secret.
 - The cookie is opaque to clients: store it, send it back, never parse it.
-- `Max-Age` comes from `cookie_max_age` (seconds).
+- `Max-Age` comes from `cookie_max_age` (seconds), or for a RADIUS account from
+  the reply's `Session-Timeout` (section 4.7e).
+- With `session_idle_timeout` set, a session that no request has read for that
+  long ends: `/session` answers `{"valid":false,"error":"session expired"}`.
+  `GET /session`, `POST /api/v1/validate` and the account page each count as a
+  use, written down at most once a minute.
 - Logout deletes the row, so replaying an old cookie value fails with
   `{"valid":false,"error":"session not found"}`.
 - `claims` is a JSON object produced by the optional external claims hook at
@@ -395,7 +402,11 @@ With `radius.enabled`, a password for a name the CSV file does not have is check
 
 - **Access-Accept**: as a password. The session's `method` is `radius`, and its `claims` are
   `{"groups":[...]}` from `radius.group_attributes`, or the claims hook's answer (signet-hooks(5)).
-  An app's code may follow (`radius+totp`).
+  An app's code may follow (`radius+totp`). A `Session-Timeout` sets the session's lifetime and
+  the cookie's `Max-Age`, and an `Idle-Timeout` its idle limit, each up to
+  `radius.max_session_timeout` and `radius.max_idle_timeout` (by default `cookie_max_age` and
+  `session_idle_timeout`, so a server can shorten but not lengthen a session until they are
+  raised). Signet sends neither: RFC 2865 §5.44 forbids them in an Access-Request.
 - **Access-Challenge**: no session. JSON gets
   `{"success":false,"step":"radius","pending":"...","message":"<the server's Reply-Message>"}`;
   a form gets the page asking for it. `POST /login` with `pending` and `code` set to the answer
@@ -660,6 +671,7 @@ await fetch('/logout', { method: 'POST', headers: { 'Accept': 'application/json'
 |---|---|
 | `listen` | base URL |
 | `cookie_name`, `cookie_domain`, `cookie_max_age` | cookie identity and lifetime |
+| `session_idle_timeout` | seconds without a use before a session ends; 0, the default, never |
 | `cookie_secure` | `Secure` attribute; keep `true` behind TLS |
 | `auth_methods.{password,webauthn,email_pin}` | whether a method's endpoints exist (`email_pin` answers 503 when off; `webauthn` also needs `webauthn_rpid` and `webauthn_origins`) |
 | `webauthn_origins` | exact origins allowed for WebAuthn |

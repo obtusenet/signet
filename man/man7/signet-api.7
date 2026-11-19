@@ -160,7 +160,18 @@ is controlled by
 and
 .Va Max-Age
 by
-.Va cookie_max_age .
+.Va cookie_max_age ,
+or for a RADIUS account by the reply's
+.Li Session-Timeout .
+With
+.Va session_idle_timeout
+set, a session no request has read for that long ends, and
+.Cm GET /session
+answers
+.Li "session expired" ;
+.Cm GET /session ,
+.Cm POST /api/v1/validate
+and the account page count as a use, written down at most once a minute.
 .Pp
 .Cm GET /session
 also returns the headers
@@ -491,6 +502,16 @@ or the claims hook's answer
 .Pq Xr signet-hooks 5 .
 An authenticator app's code may follow
 .Pq Li radius+totp .
+A
+.Li Session-Timeout
+sets the session's lifetime and the cookie's
+.Li Max-Age ,
+and an
+.Li Idle-Timeout
+its idle limit, each up to
+.Va radius.max_session_timeout
+and
+.Va radius.max_idle_timeout .
 .It Access-Challenge
 No session.
 JSON gets

@@ -177,6 +177,10 @@ check "the right answer signs in" 302 "$(http -c "$DIR/jar" -o /dev/null -w '%{h
     --data-urlencode "pending=$token" --data-urlencode "code=123456" http://localhost/login)"
 contains "with the group the answer brought" '"groups":["tokens"]' "$(session)"
 
+http -o /dev/null -D "$DIR/headers" -H 'Accept: application/json' \
+    --data-urlencode "email=timed" --data-urlencode "password=timed-pw" http://localhost/login
+contains "Session-Timeout sets the cookie's Max-Age" "Max-Age=600" "$(cat "$DIR/headers")"
+
 echo "--- pap-blog: another application, other groups"
 use pap-blog
 contains "bob signs in to the blog" '"success":true' "$(login bob bob-pw)"

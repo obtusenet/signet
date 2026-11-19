@@ -59,23 +59,33 @@ for hook in claims-hook.py claims-hook.sh; do
     fi
 done
 
-# radius-claims.py: a role from the RADIUS groups.
-path="$SCRIPT_DIR/radius-claims.py"
-req='{"type":"claim_request","email":"jdoe","source":"radius","radius":{"nas_identifier":"wiki","groups":["staff","wiki-editors"],"attributes":[]}}'
-output=$(printf '%s\n' "$req" | timeout 5 "$path" 2>/dev/null)
-check "radius-claims.py answers a request" "$output" '"type": *"claim_response"'
-check "radius-claims.py takes the role from the groups" "$output" '"role": *"editor"'
-check "radius-claims.py passes the groups on" "$output" '"groups": *\["staff", *"wiki-editors"\]'
-check "radius-claims.py names the application" "$output" '"application": *"wiki"'
-output=$(printf '%s\n' "$REQUEST" | timeout 5 "$path" 2>/dev/null)
-check "radius-claims.py gives a local account the default role" "$output" '"role": *"user"'
-output=$(printf 'not valid json\n' | timeout 5 "$path" 2>/dev/null)
-if printf '%s' "$output" | grep -q '"claim_response"'; then
-    echo "FAIL - radius-claims.py granted claims for invalid JSON: $output"
-    failures=$((failures + 1))
-else
-    echo "ok   - radius-claims.py grants nothing for invalid JSON"
-fi
+# radius-claims.py and radius-claims.sh: a role from the RADIUS groups.  The
+# shell one runs under each POSIX shell here.
+radius_req='{"type":"claim_request","email":"jdoe","source":"radius","radius":{"nas_identifier":"wiki","groups":["staff","wiki-editors","a\",\"wiki-admins","x]y"],"attributes":[{"type":11,"name":"Filter-Id","value":"staff"}]}}'
+radius_check() { # name command...
+    local name="$1"
+    shift
+    local output
+    output=$(printf '%s\n' "$radius_req" | timeout 5 "$@" 2>/dev/null)
+    check "$name answers a request" "$output" '"type": *"claim_response"'
+    check "$name takes the role from the groups" "$output" '"role": *"editor"'
+    check "$name passes the groups on" "$output" '"groups": *\["staff", *"wiki-editors"'
+    check "$name names the application" "$output" '"application": *"wiki"'
+    output=$(printf '%s\n' "$REQUEST" | timeout 5 "$@" 2>/dev/null)
+    check "$name gives a local account the default role" "$output" '"role": *"user"'
+    output=$(printf 'not valid json\n' | timeout 5 "$@" 2>/dev/null)
+    if printf '%s' "$output" | grep -q '"claim_response"'; then
+        echo "FAIL - $name granted claims for invalid JSON: $output"
+        failures=$((failures + 1))
+    else
+        echo "ok   - $name grants nothing for invalid JSON"
+    fi
+}
+radius_check radius-claims.py "$SCRIPT_DIR/radius-claims.py"
+for sh in sh bash ksh mksh ksh93; do
+    command -v "$sh" > /dev/null || continue
+    radius_check "radius-claims.sh under $sh" "$sh" "$SCRIPT_DIR/radius-claims.sh"
+done
 
 if [ "$failures" -ne 0 ]; then
     echo "$failures check(s) failed"

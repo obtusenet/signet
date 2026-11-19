@@ -31,7 +31,8 @@ func (s *Server) startRadius() {
 	if !s.cfg.Radius.Enabled {
 		return
 	}
-	src, err := auth.NewRadiusSource(s.cfg.Radius)
+	maxSession, maxIdle := s.cfg.RadiusCeilings()
+	src, err := auth.NewRadiusSource(s.cfg.Radius, maxSession, maxIdle)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("RADIUS cannot be used: %v", err))
 		src = auth.BrokenRadiusSource(err)

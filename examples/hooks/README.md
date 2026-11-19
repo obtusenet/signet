@@ -23,8 +23,8 @@ Signet sends a JSON line to the hook's stdin:
 
 For an account a RADIUS server accepted, `source` is `"radius"`, and a `radius`
 member carries the application, the groups and every reply attribute.
-`radius-claims.py` turns those groups into a role; see `signet-hooks(5)` and
-`examples/radius/`.
+`radius-claims.py`, and `radius-claims.sh` in POSIX `sh` and `awk` (bash and ksh
+alike), turn those groups into a role; see `signet-hooks(5)` and `examples/radius/`.
 
 ### Response (Hook → Signet)
 

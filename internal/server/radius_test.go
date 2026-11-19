@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -14,9 +15,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/obtusenet/signet/internal/config"
 	"github.com/obtusenet/signet/internal/radius"
+	"github.com/obtusenet/signet/internal/session"
 )
 
 const radiusSecret = "testing123"
@@ -65,6 +68,18 @@ func newFakeRadius(t *testing.T) *fakeRadius {
 				attrs = []radius.Attribute{
 					{Type: radius.AttrFilterID, Value: []byte("wiki-admins")},
 					{Type: radius.AttrFilterID, Value: []byte("staff")},
+				}
+			case string(user) == "timed" && pw == "radius-pw":
+				code = radius.CodeAccessAccept
+				attrs = []radius.Attribute{
+					{Type: radius.AttrSessionTimeout, Value: radius.Uint32(600)},
+					{Type: radius.AttrIdleTimeout, Value: radius.Uint32(120)},
+				}
+			case string(user) == "long" && pw == "radius-pw":
+				code = radius.CodeAccessAccept
+				attrs = []radius.Attribute{
+					{Type: radius.AttrSessionTimeout, Value: radius.Uint32(999999)},
+					{Type: radius.AttrIdleTimeout, Value: radius.Uint32(999999)},
 				}
 			case string(user) == "otp-user" && !challenged && pw == "radius-pw":
 				code = radius.CodeAccessChallenge
@@ -421,5 +436,95 @@ func TestRadiusBrokenSourceFailsClosed(t *testing.T) {
 	w := radiusLogin(s, "jdoe", "radius-pw", "Accept", "application/json")
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("%d: %s", w.Code, w.Body)
+	}
+}
+
+// storedSession reads the session w's cookie names.
+func storedSession(t *testing.T, s *Server, w *httptest.ResponseRecorder) *session.Session {
+	t.Helper()
+	token, err := s.cookieMgr.ValidateCookieValue(sessionCookie(t, s, w).Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := s.sessionStore.Get(context.Background(), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sess
+}
+
+// Session-Timeout and Idle-Timeout set the session's lifetime, the cookie's
+// Max-Age and the idle limit.
+func TestRadiusTimeouts(t *testing.T) {
+	f := newFakeRadius(t)
+	s := radiusServer(t, f.addr())
+	w := radiusLogin(s, "timed", "radius-pw")
+	if c := sessionCookie(t, s, w); c.MaxAge != 600 {
+		t.Errorf("cookie Max-Age %d, want 600", c.MaxAge)
+	}
+	sess := storedSession(t, s, w)
+	if sess.IdleTimeout != 120 {
+		t.Errorf("idle %d, want 120", sess.IdleTimeout)
+	}
+	if left := time.Until(sess.ExpiresAt); left < 590*time.Second || left > 600*time.Second {
+		t.Errorf("expires in %v, want 600s", left)
+	}
+
+	// No timeouts: Signet's own.
+	w = radiusLogin(s, "jdoe", "radius-pw")
+	if c := sessionCookie(t, s, w); c.MaxAge != s.cfg.CookieMaxAge {
+		t.Errorf("cookie Max-Age %d, want cookie_max_age %d", c.MaxAge, s.cfg.CookieMaxAge)
+	}
+	if sess := storedSession(t, s, w); sess.IdleTimeout != 0 {
+		t.Errorf("idle %d, want the store's", sess.IdleTimeout)
+	}
+}
+
+// Unless the ceilings are raised, a server can only shorten a session.
+func TestRadiusTimeoutCeilings(t *testing.T) {
+	f := newFakeRadius(t)
+	s := radiusServer(t, f.addr(), func(c *config.Config) {
+		c.CookieMaxAge = 3600
+		c.SessionIdleTimeout = 900
+	})
+	w := radiusLogin(s, "long", "radius-pw")
+	if c := sessionCookie(t, s, w); c.MaxAge != 3600 {
+		t.Errorf("cookie Max-Age %d, want cookie_max_age 3600", c.MaxAge)
+	}
+	if sess := storedSession(t, s, w); sess.IdleTimeout != 900 {
+		t.Errorf("idle %d, want session_idle_timeout 900", sess.IdleTimeout)
+	}
+
+	s = radiusServer(t, f.addr(), func(c *config.Config) {
+		c.CookieMaxAge = 3600
+		c.Radius.MaxSessionTimeout = 2000000
+		c.Radius.MaxIdleTimeout = 5000
+	})
+	w = radiusLogin(s, "long", "radius-pw")
+	if c := sessionCookie(t, s, w); c.MaxAge != 999999 {
+		t.Errorf("cookie Max-Age %d, want 999999", c.MaxAge)
+	}
+	if sess := storedSession(t, s, w); sess.IdleTimeout != 5000 {
+		t.Errorf("idle %d, want the 5000 ceiling", sess.IdleTimeout)
+	}
+}
+
+// session_idle_timeout ends a quiet session of any account.
+func TestSessionIdleTimeout(t *testing.T) {
+	s := recoveryServer(t, func(c *config.Config) { c.SessionIdleTimeout = 60 })
+	w := loginForm(s, passwordForm())
+	token, err := s.cookieMgr.ValidateCookieValue(sessionCookie(t, s, w).Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := sessionJSON(t, s, w, ""); body["valid"] != true {
+		t.Fatalf("fresh: %v", body)
+	}
+	if _, err := s.db.DB().Exec(`UPDATE sessions SET last_seen_unix = ? WHERE token = ?`,
+		time.Now().Add(-2*time.Minute).Unix(), session.HashToken(token)); err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := sessionJSON(t, s, w, ""); body["valid"] != false || body["error"] != "session expired" {
+		t.Errorf("idle two minutes: %v", body)
 	}
 }

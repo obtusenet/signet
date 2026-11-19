@@ -16,6 +16,9 @@ static_dir: "/var/www/signet/static"
 cookie_name: "signetid"
 cookie_domain: ""          # empty = browser default
 cookie_max_age: 86400      # seconds (24 hours)
+# End a session after this many seconds without a request that reads it
+# (GET /session, /api/v1/validate, /account).  0 never does.
+session_idle_timeout: 0
 cookie_secure: true        # false only for plain-HTTP testing
 # Signs session cookies.  Required by `signet serve`, at least 32 characters:
 #   openssl rand -hex 32
@@ -141,6 +144,11 @@ radius:
   retries: 2                        # more tries per server
   group_attributes: ["Filter-Id"]   # also "Class", or "vendor:<id>:<type>"
   require_message_authenticator: true   # replies without one are dropped
+  # A reply's Session-Timeout and Idle-Timeout replace cookie_max_age and
+  # session_idle_timeout for that session, up to these.  0 is Signet's own
+  # values, so a server can only shorten a session until they are raised.
+  max_session_timeout: 0
+  max_idle_timeout: 0
 
 # API
 api_rate_limit: 60

@@ -773,6 +773,27 @@ Each value is one group; values that are not printable text are left out and
 logged.
 Default:
 .Dq Filter-Id .
+.It Li radius.max_session_timeout , radius.max_idle_timeout
+The most, in seconds, that an Access-Accept's
+.Li Session-Timeout
+(RFC 2865 section 5.27) and
+.Li Idle-Timeout
+(section 5.28) may set a session's lifetime and idle limit to.
+They replace
+.Li cookie_max_age
+and
+.Li session_idle_timeout
+for that session, longer or shorter, up to these.
+0 is Signet's own:
+.Li cookie_max_age ,
+and
+.Li session_idle_timeout
+or, when that is 0,
+.Li cookie_max_age .
+So until these are raised, a server can only shorten a session.
+Signet does not send its own limits: RFC 2865 section 5.44 forbids both
+attributes in an Access-Request.
+Default: 0.
 .It Li radius.require_message_authenticator
 Drop replies without a
 .Li Message-Authenticator
@@ -832,8 +853,17 @@ Cookie domain.
 If empty, the cookie is scoped to the current host.
 Default: empty.
 .It Li cookie_max_age
-Cookie and session lifetime in seconds.
+Cookie and session lifetime in seconds, from sign-in.
 Default: 86400 (24 hours).
+.It Li session_idle_timeout
+End a session after this many seconds without a request that reads it:
+.Cm GET /session ,
+.Cm POST /api/v1/validate
+or the account page.
+A use is written down at most once a minute, or every quarter of the limit when
+that is shorter, so a session ends up to that much later than the limit.
+0 never ends one for being idle.
+Default: 0.
 .It Li cookie_secure
 Whether the cookie carries the
 .Dq Secure

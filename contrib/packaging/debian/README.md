@@ -26,7 +26,7 @@ to the Debian archive.
 | `/etc/signet/templates`, `/etc/signet/static` | working copies of the web files |
 | `/usr/share/signet/web` | the web files as shipped |
 | `/var/lib/signet` | database and `users.csv`, `0750 _signet` |
-| `/usr/share/doc/signet/examples` | claims hooks and web-server samples |
+| `/usr/share/doc/signet/examples` | claims hooks, web-server samples, and a FreeRADIUS guide |
 
 ## Behaviour
 

@@ -37,11 +37,34 @@ type Session struct {
 	Facts     string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	// IdleTimeout is this session's own idle limit in seconds, set from a
+	// RADIUS reply; 0 is the store's (session_idle_timeout).
+	IdleTimeout int
+	// LastSeen is when a request last read the session, to within the
+	// store's touch interval.
+	LastSeen time.Time
 }
 
 // Store manages sessions in the database
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	idle time.Duration // session_idle_timeout; 0 is none
+}
+
+// SetIdleTimeout ends sessions after d without a request that reads them, unless
+// a session has its own; 0 switches it off.
+func (s *Store) SetIdleTimeout(d time.Duration) {
+	s.idle = d
+}
+
+// touchEvery is how often a session's last use is written: at most once a
+// minute, or more often for a shorter idle limit, so a busy session costs few
+// writes and the limit is kept to within a quarter of itself.
+func touchEvery(idle time.Duration) time.Duration {
+	if q := idle / 4; q < time.Minute {
+		return q
+	}
+	return time.Minute
 }
 
 // NewStore creates a new session store
@@ -52,13 +75,15 @@ func NewStore(db *sql.DB) *Store {
 // Create creates a new session
 func (s *Store) Create(ctx context.Context, session *Session) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO sessions (token, user_email, auth_method, claims, facts, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sessions (token, user_email, auth_method, claims, facts, idle_timeout, last_seen_unix, created_at, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		HashToken(session.Token),
 		session.UserEmail,
 		session.AuthMethod,
 		session.Claims,
 		session.Facts,
+		session.IdleTimeout,
+		session.CreatedAt.Unix(),
 		session.CreatedAt,
 		session.ExpiresAt,
 	)
@@ -71,8 +96,9 @@ func (s *Store) Create(ctx context.Context, session *Session) error {
 // Get retrieves a session by token
 func (s *Store) Get(ctx context.Context, token string) (*Session, error) {
 	session := Session{Token: token}
+	var lastSeen int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT user_email, auth_method, claims, facts, created_at, expires_at
+		`SELECT user_email, auth_method, claims, facts, idle_timeout, last_seen_unix, created_at, expires_at
 		 FROM sessions WHERE token = ?`,
 		HashToken(token),
 	).Scan(
@@ -80,6 +106,8 @@ func (s *Store) Get(ctx context.Context, token string) (*Session, error) {
 		&session.AuthMethod,
 		&session.Claims,
 		&session.Facts,
+		&session.IdleTimeout,
+		&lastSeen,
 		&session.CreatedAt,
 		&session.ExpiresAt,
 	)
@@ -91,8 +119,32 @@ func (s *Store) Get(ctx context.Context, token string) (*Session, error) {
 	}
 
 	// Check if session is expired
-	if time.Now().After(session.ExpiresAt) {
+	now := time.Now()
+	if now.After(session.ExpiresAt) {
 		return nil, ErrSessionExpired
+	}
+
+	// Rows from before the idle limit have no last use: their sign-in is it.
+	session.LastSeen = session.CreatedAt
+	if lastSeen > 0 {
+		session.LastSeen = time.Unix(lastSeen, 0)
+	}
+	idle := s.idle
+	if session.IdleTimeout > 0 {
+		idle = time.Duration(session.IdleTimeout) * time.Second
+	}
+	if idle > 0 {
+		if now.Sub(session.LastSeen) > idle {
+			return nil, ErrSessionExpired
+		}
+		if now.Sub(session.LastSeen) >= touchEvery(idle) {
+			if _, err := s.db.ExecContext(ctx,
+				`UPDATE sessions SET last_seen_unix = ? WHERE token = ?`,
+				now.Unix(), HashToken(token)); err != nil {
+				return nil, err
+			}
+			session.LastSeen = now
+		}
 	}
 
 	return &session, nil

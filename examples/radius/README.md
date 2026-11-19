@@ -67,6 +67,18 @@ bob	NAS-Identifier == "blog", Cleartext-Password := "b-password"
 `bob` signs in to the wiki as a `wiki-editors` member and to the blog as a
 `blog-readers` member, and to any other application not at all.
 
+A reply may also set the session's limits, in seconds:
+
+```
+carol	Cleartext-Password := "c-password"
+	Session-Timeout := 28800,
+	Idle-Timeout := 900
+```
+
+Signet uses them up to `radius.max_session_timeout` and
+`radius.max_idle_timeout`, which default to its own `cookie_max_age` and
+`session_idle_timeout`: raise those to let the server lengthen a session.
+
 A real deployment keeps passwords in LDAP, SQL or Active Directory rather than
 in this file; the reply attributes are set the same way.
 
@@ -89,7 +101,8 @@ does not know the password cannot accept.
 Without a claims hook, a RADIUS account's session has the claims
 `{"groups":["wiki-admins","staff"]}`, in `GET /session` and
 `/api/v1/validate`. To turn groups into what an application expects, such as a
-role, use a claims hook: `examples/hooks/radius-claims.py` is a starting point.
+role, use a claims hook: `examples/hooks/radius-claims.py`, or
+`radius-claims.sh` for a host with only `sh` and `awk`, is a starting point.
 
 ## Security
 

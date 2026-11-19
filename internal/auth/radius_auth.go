@@ -43,7 +43,9 @@ type RadiusSource struct {
 	client *radius.Client
 	groups []radius.GroupAttribute
 	nasID  string
-	broken error // why it cannot be used; every sign-in fails closed
+	// The most a reply may set a session's lifetime and idle limit to.
+	maxSession, maxIdle uint32
+	broken              error // why it cannot be used; every sign-in fails closed
 }
 
 // BrokenRadiusSource is RADIUS switched on but unusable: every sign-in through
@@ -53,8 +55,13 @@ func BrokenRadiusSource(err error) *RadiusSource {
 }
 
 // NewRadiusSource makes the client from the radius settings, reading each
-// server's secret_file.  It contacts no server.
-func NewRadiusSource(cfg config.RadiusConfig) (*RadiusSource, error) {
+// server's secret_file.  A reply may set a session's lifetime and idle limit up
+// to maxSession and maxIdle seconds (config.RadiusCeilings).  It contacts no
+// server.
+func NewRadiusSource(cfg config.RadiusConfig, maxSession, maxIdle int) (*RadiusSource, error) {
+	if maxSession <= 0 || maxIdle <= 0 {
+		return nil, errors.New("the RADIUS session ceilings must be positive")
+	}
 	rc := radius.Config{
 		NASIdentifier:               cfg.NASIdentifier,
 		Timeout:                     time.Duration(cfg.TimeoutSec) * time.Second,
@@ -79,7 +86,8 @@ func NewRadiusSource(cfg config.RadiusConfig) (*RadiusSource, error) {
 	if err != nil {
 		return nil, err
 	}
-	src := &RadiusSource{client: client, nasID: cfg.NASIdentifier}
+	src := &RadiusSource{client: client, nasID: cfg.NASIdentifier,
+		maxSession: uint32(maxSession), maxIdle: uint32(maxIdle)}
 	for _, a := range cfg.GroupAttributes {
 		ga, err := radius.ParseGroupAttribute(a)
 		if err != nil {
@@ -170,6 +178,10 @@ func (pa *PasswordAuth) radiusSignIn(ctx context.Context, done func(bool), req r
 	if facts.Radius.Groups == nil {
 		facts.Radius.Groups = []string{}
 	}
+	// Session-Timeout (RFC 2865 §5.27) and Idle-Timeout (§5.28) replace
+	// Signet's limits for this session, up to the ceilings.
+	facts.Radius.SessionTimeout = timeoutAttribute(res.Reply, radius.AttrSessionTimeout, pa.radius.maxSession)
+	facts.Radius.IdleTimeout = timeoutAttribute(res.Reply, radius.AttrIdleTimeout, pa.radius.maxIdle)
 	if pa.secondStep != nil {
 		pending, step, err := pa.secondStep(ctx, user, MethodRadius, facts)
 		if err != nil {
@@ -180,4 +192,18 @@ func (pa *PasswordAuth) radiusSignIn(ctx context.Context, done func(bool), req r
 		}
 	}
 	return pa.CreateSessionFacts(ctx, user, MethodRadius, facts)
+}
+
+// timeoutAttribute reads an integer attribute of a reply, capped at ceiling; 0
+// when it is absent, malformed or 0.
+func timeoutAttribute(p *radius.Packet, t byte, ceiling uint32) uint32 {
+	v, ok := p.Get(t)
+	if !ok || len(v) != 4 {
+		return 0
+	}
+	n := uint32(v[0])<<24 | uint32(v[1])<<16 | uint32(v[2])<<8 | uint32(v[3])
+	if n > ceiling {
+		n = ceiling
+	}
+	return n
 }

@@ -28,24 +28,27 @@ type Config struct {
 	Protocol   string `yaml:"protocol"`    // "http" (default) or "fastcgi"
 	SocketMode string `yaml:"socket_mode"` // octal file mode when listen is a Unix socket path
 
-	TemplatesDir     string `yaml:"templates_dir"`
-	StaticDir        string `yaml:"static_dir"`
-	CookieName       string `yaml:"cookie_name"`
-	CookieDomain     string `yaml:"cookie_domain"`
-	CookieMaxAge     int    `yaml:"cookie_max_age"`
-	CookieSecure     bool   `yaml:"cookie_secure"`
-	CookieSecret     string `yaml:"cookie_secret"`
-	DatabasePath     string `yaml:"database_path"`
-	CSVPath          string `yaml:"csv_path"`
-	PasswordHashAlg  string `yaml:"password_hash_algorithm"`
-	BcryptCost       int    `yaml:"bcrypt_cost"`
-	Argon2idTime     uint32 `yaml:"argon2id_time"`
-	Argon2idMemory   uint32 `yaml:"argon2id_memory"`
-	Argon2idParallel uint8  `yaml:"argon2id_parallelism"`
-	Argon2idSaltLen  uint32 `yaml:"argon2id_salt_length"`
-	Argon2idKeyLen   uint32 `yaml:"argon2id_key_length"`
-	SelfRegistration string `yaml:"self_registration"`
-	ApprovalRequired string `yaml:"self_registration_approval"`
+	TemplatesDir string `yaml:"templates_dir"`
+	StaticDir    string `yaml:"static_dir"`
+	CookieName   string `yaml:"cookie_name"`
+	CookieDomain string `yaml:"cookie_domain"`
+	CookieMaxAge int    `yaml:"cookie_max_age"`
+	// SessionIdleTimeout ends a session after this many seconds without a
+	// request that reads it; 0, the default, never does.
+	SessionIdleTimeout int    `yaml:"session_idle_timeout"`
+	CookieSecure       bool   `yaml:"cookie_secure"`
+	CookieSecret       string `yaml:"cookie_secret"`
+	DatabasePath       string `yaml:"database_path"`
+	CSVPath            string `yaml:"csv_path"`
+	PasswordHashAlg    string `yaml:"password_hash_algorithm"`
+	BcryptCost         int    `yaml:"bcrypt_cost"`
+	Argon2idTime       uint32 `yaml:"argon2id_time"`
+	Argon2idMemory     uint32 `yaml:"argon2id_memory"`
+	Argon2idParallel   uint8  `yaml:"argon2id_parallelism"`
+	Argon2idSaltLen    uint32 `yaml:"argon2id_salt_length"`
+	Argon2idKeyLen     uint32 `yaml:"argon2id_key_length"`
+	SelfRegistration   string `yaml:"self_registration"`
+	ApprovalRequired   string `yaml:"self_registration_approval"`
 	// EmailVerification is how self-registration proves the address: "required"
 	// creates the account only from a link in mail, "disabled" at once.
 	EmailVerification string `yaml:"email_verification"`
@@ -168,6 +171,10 @@ type RadiusConfig struct {
 	GroupAttributes []string `yaml:"group_attributes"`
 	// RequireMessageAuthenticator drops replies without one (CVE-2024-3596).
 	RequireMessageAuthenticator bool `yaml:"require_message_authenticator"`
+	// The most a reply's Session-Timeout and Idle-Timeout may set, in
+	// seconds.  0 is Signet's own: see RadiusCeilings.
+	MaxSessionTimeout int `yaml:"max_session_timeout"`
+	MaxIdleTimeout    int `yaml:"max_idle_timeout"`
 }
 
 // RadiusServerConfig is one server.  Exactly one of Secret and SecretFile.
@@ -562,10 +569,32 @@ func Validate(cfg *Config) error {
 	if cfg.ClaimsHook.RefreshRateLimit <= 0 || cfg.ClaimsHook.RefreshRateWindow <= 0 {
 		return fmt.Errorf("claims_hook.refresh_rate_limit and claims_hook.refresh_rate_window must be positive")
 	}
+	if cfg.SessionIdleTimeout < 0 {
+		return fmt.Errorf("session_idle_timeout cannot be negative (0 switches it off)")
+	}
 	if err := validateRadius(cfg); err != nil {
 		return err
 	}
 	return nil
+}
+
+// RadiusCeilings are the most a RADIUS reply may set a session's lifetime and
+// idle limit to: radius.max_session_timeout, else cookie_max_age; and
+// radius.max_idle_timeout, else session_idle_timeout, else cookie_max_age.  So
+// unless they are raised, a server can only shorten a session.
+func (c *Config) RadiusCeilings() (session, idle int) {
+	session = c.Radius.MaxSessionTimeout
+	if session == 0 {
+		session = c.CookieMaxAge
+	}
+	idle = c.Radius.MaxIdleTimeout
+	if idle == 0 {
+		idle = c.SessionIdleTimeout
+	}
+	if idle == 0 {
+		idle = c.CookieMaxAge
+	}
+	return session, idle
 }
 
 // validateRadius checks the radius block when it is on, and gives each server
@@ -623,6 +652,10 @@ func validateRadius(cfg *Config) error {
 	if r.Retries < 0 || r.Retries > 10 {
 		return fmt.Errorf("radius.retries must be 0 to 10")
 	}
+	if r.MaxSessionTimeout < 0 || r.MaxIdleTimeout < 0 {
+		return fmt.Errorf("radius.max_session_timeout and radius.max_idle_timeout cannot be negative (0 is Signet's own)")
+	}
+
 	for _, a := range r.GroupAttributes {
 		if _, err := radius.ParseGroupAttribute(a); err != nil {
 			return fmt.Errorf("radius.group_attributes: %w", err)

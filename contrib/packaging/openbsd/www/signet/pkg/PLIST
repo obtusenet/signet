@@ -22,6 +22,7 @@ share/examples/signet/hooks/README.md
 share/examples/signet/hooks/claims-hook.py
 share/examples/signet/hooks/claims-hook.sh
 share/examples/signet/hooks/radius-claims.py
+share/examples/signet/hooks/radius-claims.sh
 share/examples/signet/hooks/test-hooks.sh
 share/examples/signet/radius/
 share/examples/signet/radius/README.md

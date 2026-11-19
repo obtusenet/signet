@@ -29,6 +29,8 @@ const (
 	AttrReplyMessage         = 18
 	AttrState                = 24
 	AttrClass                = 25
+	AttrSessionTimeout       = 27
+	AttrIdleTimeout          = 28
 	AttrVendorSpecific       = 26
 	AttrCalledStationID      = 30
 	AttrCallingStationID     = 31

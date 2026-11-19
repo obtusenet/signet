@@ -93,6 +93,7 @@ post-install:
 	${INSTALL_SCRIPT} ${WRKSRC}/examples/hooks/claims-hook.sh \
 		${WRKSRC}/examples/hooks/claims-hook.py \
 		${WRKSRC}/examples/hooks/radius-claims.py \
+		${WRKSRC}/examples/hooks/radius-claims.sh \
 		${WRKSRC}/examples/hooks/test-hooks.sh \
 		${PREFIX}/share/examples/signet/hooks/
 	${INSTALL_DATA} ${WRKSRC}/examples/hooks/README.md \

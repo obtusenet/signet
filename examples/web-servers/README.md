@@ -32,7 +32,8 @@ shares one rate-limit budget and the log shows only the proxy:
 | FastCGI | none: the web server reports the client directly |
 
 A visitor can send `Remote-User`, `Remote-Email` and `Remote-Avatar` too, so the web server
-must not pass the visitor's copies to the application. The nginx examples clear all three, since
+must not pass the visitor's copies to the application. Signet sends `Remote-Email` only when the
+account is a mail address: a RADIUS account with a plain name has `Remote-User` alone. The nginx examples clear all three, since
 signet sends `Remote-Avatar` only for an account with a picture. Caddy's `forward_auth`
 `copy_headers` removes a visitor's copy of each header it names (tested with Caddy 2.11.4).
 `make test-web-servers` sends forged ones through every example.

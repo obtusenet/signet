@@ -67,6 +67,9 @@ A RADIUS backend for accounts is planned and not built.
 - `POST /api/v1/validate` does the same for a backend that holds the cookie, with
   an API key per application and CORS limited to that application's origins.
 - `?claims=refresh` runs the claims hook again for a session.
+- A session lasts `cookie_max_age` from sign-in, and with `session_idle_timeout`
+  ends sooner when nothing reads it. A use is written at most once a minute, so a
+  busy session costs few writes, and the limit is kept to within that.
 - Removing a security key, using a recovery link and deleting an account end every
   session of the account. Changing a password ends the account's other sessions.
   Editing `users.csv` by hand, or setting `locked`, stops new sign-ins but leaves
@@ -137,6 +140,11 @@ A RADIUS backend for accounts is planned and not built.
 - **Access-Challenge** becomes a step, like the code step: the server's prompt, one
   answer per challenge, sent with `State` to the server that asked.
 - **No answer fails closed** with `503`, and is not counted against the account.
+- **The server may set the session's limits.** `Session-Timeout` and `Idle-Timeout`
+  in an Accept replace `cookie_max_age` and `session_idle_timeout` for that session,
+  up to ceilings that default to those same values: a server can shorten a session,
+  and lengthen one only as far as the administrator allows. Signet does not send its
+  own limits, since RFC 2865 §5.44 forbids both attributes in a request.
 - PAP over UDP and MS-CHAPv2 are weak against someone on the network path. Keep
   RADIUS on a trusted network, or under IPsec.
 

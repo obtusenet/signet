@@ -52,6 +52,10 @@ type RadiusFacts struct {
 	NASIdentifier string                 `json:"nas_identifier"`
 	Groups        []string               `json:"groups"`
 	Attributes    []radius.AttributeView `json:"attributes"`
+	// The reply's Session-Timeout and Idle-Timeout, in seconds; 0 when it
+	// had none.  The session's limits are these, up to the radius ceilings.
+	SessionTimeout uint32 `json:"session_timeout,omitempty"`
+	IdleTimeout    uint32 `json:"idle_timeout,omitempty"`
 }
 
 // LocalFacts are the facts of a users.csv account: none.
