@@ -71,6 +71,8 @@ func main() {
 		cmdUserDeleteTOTP(os.Args[2:])
 	case "user-unlock":
 		cmdUserUnlock(os.Args[2:])
+	case "session-revoke":
+		cmdSessionRevoke(os.Args[2:])
 	case "avatar-remove":
 		cmdAvatarRemove(os.Args[2:])
 	case "client-add":
@@ -765,6 +767,54 @@ func cmdUserDeleteTOTP(args []string) {
 }
 
 // cmdUserUnlock clears an account's count of failed sign-ins, ending a lock.
+// cmdSessionRevoke ends every session of an account and changes nothing else.  It
+// is how a RADIUS account, which has no row in users.csv, is signed out; its
+// server decides whether it may sign in again.
+func cmdSessionRevoke(args []string) {
+	fs := flag.NewFlagSet("session-revoke", flag.ExitOnError)
+	configPath := fs.String("config", defaultConfig, "path to config file")
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		fmt.Fprintf(os.Stderr, "Usage: signet session-revoke [options] <email or name>\n")
+		os.Exit(1)
+	}
+	account := fs.Arg(0)
+
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+	// A users.csv account is found apart from case, as at sign-in; any other
+	// name is a RADIUS one, and matches exactly as it was typed.
+	backend, err := csv.New(cfg.CSVPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing CSV backend: %v\n", err)
+		os.Exit(1)
+	}
+	account = backend.Resolve(account)
+	backend.Close()
+
+	dbStore, err := db.New(cfg.DatabasePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening database: %v\n", err)
+		os.Exit(1)
+	}
+	defer dbStore.Close()
+	n, err := session.NewStore(dbStore.DB()).RevokeAccount(context.Background(), account)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error ending sessions: %v\n", err)
+		dbStore.Close()
+		os.Exit(1)
+	}
+	if n == 0 {
+		fmt.Printf("%s has no sessions\n", account)
+		return
+	}
+	fmt.Printf("Ended %d sessions of %s\n", n, account)
+}
+
 func cmdUserUnlock(args []string) {
 	fs := flag.NewFlagSet("user-unlock", flag.ExitOnError)
 	configPath := fs.String("config", defaultConfig, "path to config file")
@@ -932,6 +982,7 @@ Commands:
   user-delete-webauthn Delete a WebAuthn credential
   user-delete-totp   Remove an account's TOTP keys, for a lost authenticator
   user-unlock        Clear an account's failed sign-ins, ending a lockout
+  session-revoke     End every session of an account, local or RADIUS
   avatar-remove      Remove an account's picture
   client-add         Register an application allowed to call /api/v1/validate
   client-list        List registered applications

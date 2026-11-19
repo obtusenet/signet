@@ -181,6 +181,13 @@ http -o /dev/null -D "$DIR/headers" -H 'Accept: application/json' \
     --data-urlencode "email=timed" --data-urlencode "password=timed-pw" http://localhost/login
 contains "Session-Timeout sets the cookie's Max-Age" "Max-Age=600" "$(cat "$DIR/headers")"
 
+contains "jdoe signs in again" '"success":true' "$(login jdoe radius-pw)"
+check "session-revoke matches a RADIUS name exactly" "JDOE has no sessions" \
+    "$("$SIGNET" session-revoke -config "$DIR/pap-wiki/config.yaml" JDOE)"
+contains "session-revoke ends jdoe's sessions" "sessions of jdoe" \
+    "$("$SIGNET" session-revoke -config "$DIR/pap-wiki/config.yaml" jdoe)"
+contains "and the session is gone" '"valid":false' "$(session)"
+
 echo "--- pap-blog: another application, other groups"
 use pap-blog
 contains "bob signs in to the blog" '"success":true' "$(login bob bob-pw)"

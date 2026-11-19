@@ -398,7 +398,9 @@ A RADIUS account (section 4.7e) takes only `"code"` or `"enrol"`, and at `"enrol
 ### 4.7e RADIUS accounts
 
 With `radius.enabled`, a password for a name the CSV file does not have is checked by RADIUS servers
-(signet-config.yaml(5)). A name the file has never goes to them.
+(signet-config.yaml(5)). A name the file has never goes to them, so a local account shadows a
+RADIUS one of the same name, including one self-registered for an address that is also a RADIUS
+name. `signet session-revoke <name>` ends a RADIUS account's sessions.
 
 - **Access-Accept**: as a password. The session's `method` is `radius`, and its `claims` are
   `{"groups":[...]}` from `radius.group_attributes`, or the claims hook's answer (signet-hooks(5)).

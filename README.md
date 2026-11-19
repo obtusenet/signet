@@ -272,7 +272,11 @@ Names that `users.csv` does not have can sign in with a password that RADIUS ser
 check (RFC 2865, over UDP). A name in `users.csv` never goes to them. The reply's
 groups become the claim `groups`, or reach the claims hook. A server's challenge
 becomes one more step, and an authenticator app may follow as a second factor.
-`docs/DESIGN.md` says what such an account can and cannot do here.
+`docs/DESIGN.md` says what such an account can and cannot do here. Because
+`users.csv` is asked first, a local account shadows a RADIUS one of the same name,
+including one self-registered for an address that is also a RADIUS name: keep
+the names apart, or keep self-registration off. `signet session-revoke` signs a
+RADIUS account out here.
 
 | Setting | Default | Meaning |
 |---|---|---|

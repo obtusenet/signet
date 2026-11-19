@@ -489,7 +489,10 @@ With
 a password for a name the CSV file does not have is checked by the RADIUS
 servers
 .Pq Xr signet-config.yaml 5 .
-A name the file has never goes to them.
+A name the file has never goes to them, so a local account shadows a RADIUS one
+of the same name.
+.Nm signet Cm session-revoke
+ends a RADIUS account's sessions.
 .Bl -tag -width Ds
 .It Access-Accept
 As a password: the session's

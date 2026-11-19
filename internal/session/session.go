@@ -181,6 +181,16 @@ func (s *Store) RevokeAll(ctx context.Context, userEmail string) error {
 	return err
 }
 
+// RevokeAccount ends every session of an account and answers how many there
+// were.  The name must match as the session holds it.
+func (s *Store) RevokeAccount(ctx context.Context, account string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_email = ?`, account)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // RevokeOthers revokes all sessions for a user except the one with this token.
 func (s *Store) RevokeOthers(ctx context.Context, userEmail, keepToken string) error {
 	_, err := s.db.ExecContext(ctx,

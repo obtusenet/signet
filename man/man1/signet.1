@@ -55,6 +55,10 @@
 .Op Fl config Ar path
 .Ar email
 .Nm
+.Cm session-revoke
+.Op Fl config Ar path
+.Ar account
+.Nm
 .Cm avatar-remove
 .Op Fl config Ar path
 .Ar email
@@ -323,6 +327,13 @@ Clear the account's count of failed sign-ins, ending a lock by
 .Va account_lockout_threshold
 .Pq see Xr signet-config.yaml 5 .
 A finished sign-in, by any method, or a password recovery clears it as well.
+.It Ar session-revoke Ar account
+End every session of an account, and change nothing else: it can sign in again.
+An account in the CSV file is found apart from case;
+any other name is a RADIUS account's, matched exactly as it was typed.
+This is how a RADIUS account is signed out here.
+Its server decides whether it may sign in again, and is not told: RADIUS has no
+request by which a client ends a session on the server.
 .It Ar avatar-remove Ar email
 Remove the account's picture, which then stops being served.
 The account can set a new one, if
@@ -446,9 +457,12 @@ Removing an account from the CSV file by hand, or setting its
 .Dq locked
 flag, stops new logins but leaves existing sessions valid until they expire.
 .Pp
-The account commands work on the CSV file only.
-A RADIUS account is disabled on its server, and its sessions here last until
-they expire.
+The account commands other than
+.Cm session-revoke
+work on the CSV file only.
+A RADIUS account is disabled on its server, and
+.Cm session-revoke
+ends its sessions here.
 Use
 .Cm user-delete
 to end them.

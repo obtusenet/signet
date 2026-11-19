@@ -104,6 +104,16 @@ Without a claims hook, a RADIUS account's session has the claims
 role, use a claims hook: `examples/hooks/radius-claims.py`, or
 `radius-claims.sh` for a host with only `sh` and `awk`, is a starting point.
 
+## Names
+
+`users.csv` is asked first, so a local account with a RADIUS user's name signs in
+on its own password and never reaches the server. When RADIUS names are mail
+addresses, that includes an account self-registered by whoever reads the
+mailbox. Keep the names apart, or leave `self_registration` off.
+
+`signet session-revoke jdoe` ends a RADIUS account's sessions in Signet. The
+server is not told; disable the account there to stop new sign-ins.
+
 ## Security
 
 PAP over UDP hides the password with MD5 and the shared secret, and an MS-CHAPv2

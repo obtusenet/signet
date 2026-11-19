@@ -715,6 +715,16 @@ With it on, a password sign-in for a name the CSV file does not have is
 checked by RADIUS servers (RFC 2865, over UDP).
 A name the file has, in any state, never goes to them, so local accounts work
 while the servers are down and their passwords stay on this host.
+So a local account shadows a RADIUS one of the same name: when RADIUS names are
+mail addresses, an account created in the file for one of them, by
+.Cm user-add
+or by
+.Li self_registration
+for whoever can read that mailbox, signs in with its own password and never
+reaches the server.
+Keep the two sets of names apart, or leave
+.Li self_registration
+off.
 A RADIUS name need not be a mail address; it is sent exactly as typed.
 A RADIUS account has no password here, no mailed PIN, recovery or security
 key, and gets no account-change notices.

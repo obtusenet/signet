@@ -138,6 +138,21 @@ echo "--- logout"
 check "logout redirects" 303 "$(code -b "$JAR" -c "$JAR" http://localhost/logout)"
 check "session is gone" 401 "$(code -b "$JAR" http://localhost/session)"
 
+echo "--- session-revoke ends every session, and nothing else"
+REVOKE_JAR="$DIR/revoke.jar"
+"$SIGNET" session-revoke -config "$CONFIG" "$USER_ADDR" > /dev/null # earlier tests' sessions
+for jar in "$REVOKE_JAR.1" "$REVOKE_JAR.2"; do
+    code -c "$jar" --data-urlencode "email=$USER_ADDR" --data-urlencode "password=$PASSWORD" \
+        http://localhost/login > /dev/null
+done
+contains "session-revoke ends both, the address found apart from case" "Ended 2 sessions of $USER_ADDR" \
+    "$("$SIGNET" session-revoke -config "$CONFIG" "$(printf '%s' "$USER_ADDR" | tr a-z A-Z)")"
+check "the first is gone" 401 "$(code -b "$REVOKE_JAR.1" http://localhost/session)"
+check "the second is gone" 401 "$(code -b "$REVOKE_JAR.2" http://localhost/session)"
+contains "again finds none" "has no sessions" "$("$SIGNET" session-revoke -config "$CONFIG" "$USER_ADDR")"
+check "the account still signs in" 302 "$(code --data-urlencode "email=$USER_ADDR" \
+    --data-urlencode "password=$PASSWORD" http://localhost/login)"
+
 echo "--- email PIN, read from the log"
 send() { http -H 'Content-Type: application/json' -d "{\"email\":\"$USER_ADDR\"}" http://localhost/email-pin/send; }
 contains "PIN sent" '"success":true' "$(send)"

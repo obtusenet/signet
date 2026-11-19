@@ -120,6 +120,13 @@ A RADIUS backend for accounts is planned and not built.
 - **Signet is a RADIUS client** (RFC 2865, UDP; no RadSec yet), for passwords of names
   `users.csv` does not have. A name the file has, in any state, never goes to RADIUS,
   so local accounts work while the servers are down and their passwords stay here.
+- **A local account shadows a RADIUS one of the same name.** When RADIUS names are
+  mail addresses, an account added to `users.csv` for one, by `user-add` or by
+  self-registration from whoever reads that mailbox, signs in on its own password and
+  never reaches the server. This follows from asking `users.csv` first, and is left
+  to the administrator: keep the names apart, or keep self-registration off.
+- **`signet session-revoke`** ends a RADIUS account's sessions here. The server is not
+  told: RADIUS has no request by which a client ends a session on the server.
 - **The client is Signet's own**, on the standard library and `x/crypto/md4`: PAP
   (§5.2) and MS-CHAPv2 (RFC 2759), several servers in order, retries that keep the
   identifier and authenticator.
