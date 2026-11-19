@@ -114,8 +114,20 @@ or RADIUS accounts are refused.
 
 The server may have its own second factor, such as a token code asked with an
 Access-Challenge. Signet passes the prompt and the answer, but cannot see or manage
-that factor, and it does not count toward `second_factor`: under `"required"` such a
-user also adds an app, and answers two prompts.
+that factor, and by default it does not count toward `second_factor`: under
+`"required"` such a user also adds an app, and answers two prompts. When the server
+challenges for nothing but a second factor, let the challenge count:
+
+```yaml
+second_factor: "required"
+radius:
+  challenge_is_second_factor: true
+```
+
+An answered challenge then finishes the sign-in, with the session's method
+`radius+challenge`. A user the server accepts without a challenge still adds and
+uses an app in Signet. Leave it off if the server may challenge for anything else,
+such as a new password.
 
 ## Names
 

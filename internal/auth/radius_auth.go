@@ -20,6 +20,10 @@ import (
 // MethodRadius is how a session records a sign-in a RADIUS server accepted.
 const MethodRadius = "radius"
 
+// MethodRadiusChallenge is a RADIUS sign-in whose answered challenge counted
+// as the second factor (radius.challenge_is_second_factor).
+const MethodRadiusChallenge = MethodRadius + "+challenge"
+
 // ErrRadiusUnavailable reports that no RADIUS server gave a valid answer, so
 // the password could not be checked.  The sign-in fails closed.
 var ErrRadiusUnavailable = errors.New("the RADIUS servers could not check the password")
@@ -45,7 +49,9 @@ type RadiusSource struct {
 	nasID  string
 	// The most a reply may set a session's lifetime and idle limit to.
 	maxSession, maxIdle uint32
-	broken              error // why it cannot be used; every sign-in fails closed
+	// challengeFactor counts an answered challenge as the second factor.
+	challengeFactor bool
+	broken          error // why it cannot be used; every sign-in fails closed
 }
 
 // BrokenRadiusSource is RADIUS switched on but unusable: every sign-in through
@@ -87,7 +93,8 @@ func NewRadiusSource(cfg config.RadiusConfig, maxSession, maxIdle int) (*RadiusS
 		return nil, err
 	}
 	src := &RadiusSource{client: client, nasID: cfg.NASIdentifier,
-		maxSession: uint32(maxSession), maxIdle: uint32(maxIdle)}
+		maxSession: uint32(maxSession), maxIdle: uint32(maxIdle),
+		challengeFactor: cfg.ChallengeIsSecondFactor}
 	for _, a := range cfg.GroupAttributes {
 		ga, err := radius.ParseGroupAttribute(a)
 		if err != nil {
@@ -182,6 +189,14 @@ func (pa *PasswordAuth) radiusSignIn(ctx context.Context, done func(bool), req r
 	// Signet's limits for this session, up to the ceilings.
 	facts.Radius.SessionTimeout = timeoutAttribute(res.Reply, radius.AttrSessionTimeout, pa.radius.maxSession)
 	facts.Radius.IdleTimeout = timeoutAttribute(res.Reply, radius.AttrIdleTimeout, pa.radius.maxIdle)
+	// An answered challenge (the request carried State) is the server's own
+	// second factor; with challenge_is_second_factor, Signet asks no more.
+	if req.State != nil && pa.radius.challengeFactor {
+		if pa.logger != nil {
+			pa.logger.Info(fmt.Sprintf("RADIUS sign-in of %s: the answered challenge is its second factor", user))
+		}
+		return pa.CreateSessionFacts(ctx, user, MethodRadiusChallenge, facts)
+	}
 	if pa.secondStep != nil {
 		pending, step, err := pa.secondStep(ctx, user, MethodRadius, facts)
 		if err != nil {

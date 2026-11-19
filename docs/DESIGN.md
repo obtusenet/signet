@@ -149,9 +149,15 @@ A RADIUS backend for accounts is planned and not built.
   `second_factor_methods` lists; local accounts keep every enabled method. A key
   as a step after a RADIUS password was considered and not taken. Under
   `second_factor: required` a RADIUS account without an app adds one at sign-in, so
-  `totp` must be enabled and listed, or the account is refused. A server's
-  Access-Challenge is the server's own factor, which Signet can neither see nor
-  manage, and does not satisfy `second_factor`.
+  `totp` must be enabled and listed, or the account is refused.
+- **A server's challenge is the server's factor.** Signet can neither see nor
+  manage it, and by default it does not satisfy `second_factor`, so a user whose
+  server challenges answers Signet's code too. With
+  `radius.challenge_is_second_factor`, an answered challenge is the sign-in's
+  second factor (method `radius+challenge`) and Signet asks for none of its own;
+  an Accept without a challenge still takes Signet's. It is off by default because
+  a challenge's purpose is invisible to Signet: a server may challenge for a new
+  password as readily as for a token code.
 - **Access-Challenge** becomes a step, like the code step: the server's prompt, one
   answer per challenge, sent with `State` to the server that asked.
 - **No answer fails closed** with `503`, and is not counted against the account.

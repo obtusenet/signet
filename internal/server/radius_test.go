@@ -528,3 +528,72 @@ func TestSessionIdleTimeout(t *testing.T) {
 		t.Errorf("idle two minutes: %v", body)
 	}
 }
+
+// challengeSignIn signs otp-user in through its challenge, and answers the
+// response to the answer.
+func challengeSignIn(t *testing.T, s *Server) *httptest.ResponseRecorder {
+	t.Helper()
+	match := pendingField.FindStringSubmatch(radiusLogin(s, "otp-user", "radius-pw").Body.String())
+	if match == nil {
+		t.Fatal("no challenge step")
+	}
+	return secondStep(s, match[1], "123456")
+}
+
+// With challenge_is_second_factor, an answered challenge satisfies
+// second_factor: required, and Signet asks for nothing more.
+func TestRadiusChallengeIsSecondFactor(t *testing.T) {
+	f := newFakeRadius(t)
+	s := radiusServer(t, f.addr(), func(c *config.Config) {
+		c.SecondFactor = "required"
+		c.AuthMethods = map[string]string{"password": "enabled", "totp": "enabled"}
+		c.Radius.ChallengeIsSecondFactor = true
+	})
+	w := challengeSignIn(t, s)
+	if w.Code != http.StatusFound || !hasSession(s, w) {
+		t.Fatalf("%d: %s", w.Code, w.Body)
+	}
+	body, _ := sessionJSON(t, s, w, "")
+	if body["method"] != "radius+challenge" || !strings.Contains(mustJSON(body["claims"]), "tokens") {
+		t.Errorf("session: %v", body)
+	}
+
+	// An Accept without a challenge still needs Signet's own second factor.
+	w = radiusLogin(s, "jdoe", "radius-pw")
+	if hasSession(s, w) || !strings.Contains(w.Body.String(), `value="totp-begin"`) {
+		t.Errorf("no challenge, yet no enrol step: %d", w.Code)
+	}
+}
+
+// An account with an app is not asked for its code after an answered challenge
+// either: the challenge was the second factor.
+func TestRadiusChallengeReplacesTheCode(t *testing.T) {
+	f := newFakeRadius(t)
+	s := radiusServer(t, f.addr(), func(c *config.Config) {
+		c.AuthMethods = map[string]string{"password": "enabled", "totp": "enabled"}
+		c.Radius.ChallengeIsSecondFactor = true
+	})
+	w := challengeSignIn(t, s)
+	if !hasSession(s, w) {
+		t.Fatalf("%d: %s", w.Code, w.Body)
+	}
+	enrollTOTP(t, s, sessionCookie(t, s, w), "phone")
+	w = challengeSignIn(t, s)
+	if w.Code != http.StatusFound || !hasSession(s, w) {
+		t.Fatalf("asked again after the challenge: %d: %s", w.Code, w.Body)
+	}
+}
+
+// Off (the default), an answered challenge is only the password's check, and
+// second_factor: required still asks for an app.
+func TestRadiusChallengeIsNotSecondFactorByDefault(t *testing.T) {
+	f := newFakeRadius(t)
+	s := radiusServer(t, f.addr(), func(c *config.Config) {
+		c.SecondFactor = "required"
+		c.AuthMethods = map[string]string{"password": "enabled", "totp": "enabled"}
+	})
+	w := challengeSignIn(t, s)
+	if hasSession(s, w) || !strings.Contains(w.Body.String(), `value="totp-begin"`) {
+		t.Errorf("signed in on the challenge alone: %d: %s", w.Code, w.Body)
+	}
+}

@@ -81,8 +81,9 @@ fi
 PORT="$(docker port "$NAME" 1812/udp | head -1 | sed 's/.*://')"
 echo "FreeRADIUS on 127.0.0.1:$PORT"
 
-# start <name> <auth> <nas_identifier>: a signet on $DIR/<name>.sock asking
-# FreeRADIUS, with one local account, local@example.com.
+# start <name> <auth> <nas_identifier> [yaml]: a signet on $DIR/<name>.sock
+# asking FreeRADIUS, with one local account, local@example.com.  yaml is more
+# top-level settings, and radius ones in its "  " lines go after the block.
 start() {
     local dir="$DIR/$1"
     mkdir -p "$dir"
@@ -107,6 +108,7 @@ radius:
   timeout_seconds: 2
   retries: 1
   group_attributes: ["Filter-Id", "Class"]
+${4:-}
 YAML
     "$SIGNET" user-add -config "$dir/config.yaml" -password-stdin local@example.com \
         <<< "local-long-password" > /dev/null || { echo "user-add failed" >&2; exit 1; }
@@ -139,6 +141,12 @@ pending() { sed -n 's/.*"pending":"\([^"]*\)".*/\1/p'; }
 start pap-wiki pap wiki
 start mschap-wiki mschapv2 wiki
 start pap-blog pap blog
+start pap-2fa pap wiki '  challenge_is_second_factor: true
+second_factor: "required"
+second_factor_methods: ["totp"]
+auth_methods:
+  password: "enabled"
+  totp: "enabled"'
 
 for inst in pap-wiki mschap-wiki; do
     echo "--- $inst"
@@ -192,6 +200,16 @@ echo "--- pap-blog: another application, other groups"
 use pap-blog
 contains "bob signs in to the blog" '"success":true' "$(login bob bob-pw)"
 contains "as a blog reader" '"groups":["blog-readers"]' "$(session)"
+
+echo "--- pap-2fa: second_factor required, and the challenge counts"
+use pap-2fa
+token="$(login otp-user radius-pw | pending)"
+check "an answered challenge signs in" 302 "$(http -c "$DIR/jar" -o /dev/null -w '%{http_code}' \
+    --data-urlencode "pending=$token" --data-urlencode "code=123456" http://localhost/login)"
+contains "as the second factor" '"method":"radius+challenge"' "$(session)"
+reply="$(login jdoe radius-pw)"
+contains "no challenge, so Signet's own factor is added" '"step":"enrol"' "$reply"
+lacks "and no session yet" '"success":true' "$reply"
 
 echo "--- what FreeRADIUS saw"
 logs="$(docker logs "$NAME" 2>&1)"

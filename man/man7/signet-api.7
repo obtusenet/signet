@@ -545,8 +545,16 @@ A RADIUS account has no password, PIN, recovery, registration or security key
 here; each answers as for an unknown address.
 Its only second factor is an app, whatever
 .Va second_factor_methods
-lists, and a server's challenge does not count toward
-.Va second_factor .
+lists.
+A server's challenge counts toward
+.Va second_factor
+only with
+.Va radius.challenge_is_second_factor ;
+then an answered challenge is the second factor, the session's
+.Va method
+is
+.Li radius+challenge ,
+and no code step follows.
 With
 .Va second_factor
 .Dq required

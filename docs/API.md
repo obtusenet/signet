@@ -214,7 +214,7 @@ Requires the cookie. `200`:
 ```
 
 `method` is one of `password`, `email_pin`, `webauthn`, `radius`, or one of
-them with the second step after a `+` (`password+totp`). Also sets the response
+them with the second step after a `+` (`password+totp`, `radius+challenge`). Also sets the response
 header `Remote-User` to the account, and `Remote-Email` to it when it is a mail
 address. A RADIUS account named `jdoe` has `"user":"jdoe"`, `"email":""` and no
 `Remote-Email`.
@@ -419,7 +419,9 @@ name. `signet session-revoke <name>` ends a RADIUS account's sessions.
 
 A RADIUS account has no password, PIN, recovery, registration or security key here: those answer as
 for an unknown address. Its only second factor is an app (TOTP), whatever `second_factor_methods`
-lists, and a server's challenge does not count toward `second_factor`. `/account` shows its apps and picture, and refuses a password change with
+lists. A server's challenge counts toward `second_factor` only with
+`radius.challenge_is_second_factor`; then an answered challenge is the second factor, the session's
+`method` is `radius+challenge`, and no code step follows. `/account` shows its apps and picture, and refuses a password change with
 `403`.
 
 ### 4.8 `POST /email-pin/send`

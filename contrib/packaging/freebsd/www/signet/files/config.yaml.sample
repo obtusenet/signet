@@ -149,6 +149,11 @@ radius:
   # values, so a server can only shorten a session until they are raised.
   max_session_timeout: 0
   max_idle_timeout: 0
+  # An answered Access-Challenge is the sign-in's second factor, and Signet
+  # asks for none of its own, even with second_factor "required".  Signet cannot
+  # tell what a challenge asks for: turn this on only when the servers challenge
+  # for nothing but a second factor, such as a token code.
+  challenge_is_second_factor: false
 
 # API
 api_rate_limit: 60

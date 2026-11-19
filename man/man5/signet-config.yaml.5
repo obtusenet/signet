@@ -741,8 +741,10 @@ it adds one at sign-in, so
 .Li totp
 must then be enabled and listed or RADIUS accounts are refused.
 A challenge from the server is the server's own factor, which Signet does not
-see or manage, and does not count toward
-.Li second_factor .
+see or manage, and counts toward
+.Li second_factor
+only with
+.Li radius.challenge_is_second_factor .
 .Bl -tag -width Ds
 .It Li radius.enabled
 Whether RADIUS checks names the CSV file lacks.
@@ -821,6 +823,18 @@ Requests always carry one.
 Turning this off exposes sign-ins to forged replies (CVE-2024-3596); do so only
 for a server that cannot send it.
 Default: true.
+.It Li radius.challenge_is_second_factor
+Count an answered Access-Challenge as the sign-in's second factor: Signet then
+asks for no code of its own, even under
+.Li second_factor
+.Dq required ,
+and the session's method is
+.Li radius+challenge .
+An Accept that came without a challenge still takes Signet's second factor.
+Signet cannot tell what a challenge asks for, and a server may challenge for a
+new password as readily as for a token code, so turn this on only when the
+servers challenge for nothing but a second factor.
+Default: false.
 .El
 .Pp
 Each request carries

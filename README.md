@@ -276,7 +276,8 @@ authenticator app (TOTP): it never uses or adds a security key, mailed PIN or
 recovery, whatever `second_factor_methods` lists, while local accounts keep every
 method enabled. With `second_factor: required`, `totp` must be enabled and listed,
 or RADIUS accounts cannot sign in. A challenge from the server is the server's own
-factor and does not count toward `second_factor`. `docs/DESIGN.md` says what such
+factor, and counts toward `second_factor` only with
+`radius.challenge_is_second_factor`. `docs/DESIGN.md` says what such
 an account can and cannot do here. Because
 `users.csv` is asked first, a local account shadows a RADIUS one of the same name,
 including one self-registered for an address that is also a RADIUS name: keep
@@ -291,6 +292,7 @@ RADIUS account out here.
 | `radius.timeout_seconds`, `radius.retries` | `3`, `2` | Per try, and more tries per server |
 | `radius.group_attributes` | `[Filter-Id]` | The reply attributes that are groups: `Filter-Id`, `Class`, a number, or `vendor:<id>:<type>` |
 | `radius.require_message_authenticator` | `true` | Drop replies without one (CVE-2024-3596) |
+| `radius.challenge_is_second_factor` | `false` | An answered Access-Challenge is the sign-in's second factor, and Signet asks for none of its own. Signet cannot tell what a challenge asks for, so turn it on only when the servers challenge for nothing but a second factor |
 | `radius.max_session_timeout`, `radius.max_idle_timeout` | `0` | The most a reply's `Session-Timeout` and `Idle-Timeout` may set; 0 is `cookie_max_age` and `session_idle_timeout`, so a server can only shorten a session until these are raised |
 
 ### Logging

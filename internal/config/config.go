@@ -175,6 +175,11 @@ type RadiusConfig struct {
 	// seconds.  0 is Signet's own: see RadiusCeilings.
 	MaxSessionTimeout int `yaml:"max_session_timeout"`
 	MaxIdleTimeout    int `yaml:"max_idle_timeout"`
+	// ChallengeIsSecondFactor counts an answered Access-Challenge as the
+	// sign-in's second factor, so Signet asks for none of its own.  Signet
+	// cannot tell what a challenge asks for: this trusts the servers to
+	// challenge only for a second factor.
+	ChallengeIsSecondFactor bool `yaml:"challenge_is_second_factor"`
 }
 
 // RadiusServerConfig is one server.  Exactly one of Secret and SecretFile.
