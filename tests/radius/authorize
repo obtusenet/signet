@@ -1,0 +1,20 @@
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+#
+# The FreeRADIUS users for tests/radius_test.sh.
+
+# Two groups, as Filter-Id.
+jdoe	Cleartext-Password := "radius-pw"
+	Filter-Id := "wiki-admins",
+	Filter-Id += "staff"
+
+# Different groups for different applications (NAS-Identifier).
+bob	NAS-Identifier == "wiki", Cleartext-Password := "bob-pw"
+	Filter-Id := "wiki-editors"
+
+bob	NAS-Identifier == "blog", Cleartext-Password := "bob-pw"
+	Filter-Id := "blog-readers"
+
+# A name that is a mail address, with its group in Class.
+"jane@example.com"	Cleartext-Password := "jane-pw"
+	Class := "staff"

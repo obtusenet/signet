@@ -278,6 +278,7 @@ func New(cfg *config.Config, logger *logging.Logger, dbStore *db.DB, backend *cs
 	s.startLockout(dbStore)
 	s.startMailLinks(dbStore)
 	s.startTOTP(dbStore, secret)
+	s.startRadius()
 	s.startAvatars(dbStore)
 
 	// Per requester, never per address: a budget per address would let anyone
@@ -793,6 +794,8 @@ type loginStep struct {
 	TOTPQR        template.URL // a data: URI made here, never from the request
 	RecoveryCodes []string     // shown once, after an app is added
 	Continue      string       // where to go after reading them
+
+	radius bool // a RADIUS account, which may not add a key here
 }
 
 // renderLoginStep shows the login page with step.
@@ -813,6 +816,7 @@ func (s *Server) renderLoginStep(w http.ResponseWriter, r *http.Request, step lo
 		"WebAuthnEnabled":      s.webauthnHandler != nil,
 		"EmailPINEnabled":      s.emailPINAuth != nil,
 		"TOTPEnabled":          s.totp != nil,
+		"RadiusEnabled":        s.passwordAuth.RadiusEnabled(),
 		"YubikeyEnabled":       s.authMethodEnabled("yubikey"),
 		"Referrer":             s.loginReferrer(r),
 		"AllowedRedirectHosts": s.allowedRedirectHostsJSON(),
@@ -868,8 +872,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Not an address, so not an account: answer as for one, without letting it
-	// near the limiter's memory or the log.
-	if err := csv.ValidateEmail(email); err != nil {
+	// near the limiter's memory or the log.  With RADIUS on, a name is an
+	// account the servers may know (exactly as typed).
+	if err := csv.ValidateEmail(email); err != nil && !(s.passwordAuth.RadiusEnabled() && validRadiusName(email)) {
 		s.logger.Warn(fmt.Sprintf("Login failed from %s: %v", s.clients.Addr(r), err))
 		s.loginReply(w, r, http.StatusUnauthorized,
 			map[string]interface{}{"success": false, "error": "Invalid email or password"},
@@ -878,52 +883,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	email = s.accounts.Resolve(email)
 
-	// Authenticate
 	authCookie, err := s.passwordAuth.Authenticate(r.Context(), email, s.clients.Addr(r), password)
-	var second *auth.SecondStepRequired
-	if errors.As(err, &second) {
-		s.askForStep(w, r, second.Pending, second.Step)
-		return
-	}
-	if errors.Is(err, auth.ErrUseSecurityKey) || errors.Is(err, auth.ErrNoSecondFactor) {
-		// The password was right, so saying what comes next reveals nothing.
-		s.logger.Warn(fmt.Sprintf("password sign-in of %s stopped: %v", email, err))
-		message := auth.SecondFactorMessage(err)
-		s.loginReply(w, r, http.StatusForbidden,
-			map[string]interface{}{"success": false, "error": message}, message)
-		return
-	}
-	if err != nil {
-		if errors.Is(err, auth.ErrClaimsRefused) {
-			// The password was right, so this reveals nothing new, and
-			// telling the user to retype it would only mislead.
-			s.logger.Warn(fmt.Sprintf("Login refused for %s: %v", email, err))
-			s.loginReply(w, r, http.StatusForbidden,
-				map[string]interface{}{"success": false, "error": "Sign-in refused"},
-				"Sign-in refused")
-			return
-		}
-		if errors.Is(err, auth.ErrRateLimited) {
-			s.logger.Warn(fmt.Sprintf("rate limited: login attempts for %s from %s", email, s.clients.Addr(r)))
-		} else if errors.Is(err, auth.ErrSourceRateLimited) {
-			s.logger.Warn(fmt.Sprintf("rate limited: failed logins from %s, now trying %s", s.clients.Addr(r), email))
-		} else {
-			s.logger.Warn(fmt.Sprintf("Login failed for %s: %v", email, err))
-		}
-		s.loginReply(w, r, http.StatusUnauthorized,
-			map[string]interface{}{"success": false, "error": "Invalid email or password"},
-			"Invalid email or password")
-		return
-	}
-
-	http.SetCookie(w, authCookie)
-	target := s.loginRedirect(r)
-	if wantsJSON(r) {
-		s.loginReply(w, r, http.StatusOK,
-			map[string]interface{}{"success": true, "redirect": target}, "")
-		return
-	}
-	http.Redirect(w, r, target, http.StatusFound)
+	s.finishPasswordSignIn(w, r, email, authCookie, err, 1)
 }
 
 // authMethodEnabled reports whether an auth method listed in the
@@ -1288,7 +1249,9 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("claims") == "refresh" && s.claimsHook != nil {
 		if !s.refreshLimiter.Allow(strings.ToLower(sess.UserEmail)) {
 			s.logger.Warn(fmt.Sprintf("rate limited: claims refresh for %s (claims_hook.refresh_rate_limit)", sess.UserEmail))
-		} else if fresh, herr := s.claimsHook.GetClaims(r.Context(), sess.UserEmail); herr != nil {
+		} else if facts, ferr := claims.ParseFacts(sess.Facts); ferr != nil {
+			s.logger.Warn(fmt.Sprintf("refreshing claims for %s: %v", sess.UserEmail, ferr))
+		} else if fresh, herr := s.claimsHook.ClaimsFor(r.Context(), sess.UserEmail, facts); herr != nil {
 			s.logger.Warn(fmt.Sprintf("refreshing claims for %s: %v", sess.UserEmail, herr))
 		} else if encoded, merr := json.Marshal(fresh); merr != nil {
 			s.logger.Warn(fmt.Sprintf("encoding refreshed claims: %v", merr))
@@ -1303,7 +1266,11 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	// Headers a reverse proxy can copy onto the upstream request after a
 	// forward-auth check (e.g. Caddy's copy_headers).
 	w.Header().Set("Remote-User", sess.UserEmail)
-	w.Header().Set("Remote-Email", sess.UserEmail)
+	address := ""
+	if isAddress(sess.UserEmail) {
+		address = sess.UserEmail
+		w.Header().Set("Remote-Email", address)
+	}
 	picture := s.avatarURL(r.Context(), sess.UserEmail)
 	if picture != nil {
 		w.Header().Set("Remote-Avatar", picture.(string))
@@ -1313,7 +1280,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		"valid":            true,
 		"avatar":           picture,
 		"user":             sess.UserEmail,
-		"email":            sess.UserEmail,
+		"email":            address,
 		"method":           sess.AuthMethod,
 		"created_at":       sess.CreatedAt.UTC().Format(time.RFC3339),
 		"expires_at":       sess.ExpiresAt.UTC().Format(time.RFC3339),

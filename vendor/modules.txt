@@ -64,6 +64,7 @@ golang.org/x/crypto/argon2
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blowfish
+golang.org/x/crypto/md4
 golang.org/x/crypto/ocsp
 # golang.org/x/sys v0.49.0
 ## explicit; go 1.26.0

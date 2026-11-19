@@ -146,7 +146,9 @@ Request (form-encoded):
 email=a@example.com&password=secret&referrer=%2Fdashboard
 ```
 
-`referrer` is optional. The password method is selected implicitly.
+`referrer` is optional. The password method is selected implicitly. With
+`radius.enabled`, `email` may also be a plain name: a name the CSV file lacks is
+checked by the RADIUS servers, exactly as typed (section 4.7e).
 
 Response with `Accept: application/json`:
 
@@ -162,10 +164,11 @@ Errors:
 | Status | Body (JSON mode) | Cause |
 |---|---|---|
 | 400 | `{"success":false,"error":"email and password are required"}` | missing field |
-| 401 | `{"success":false,"error":"Invalid email or password"}` | anything that is not a valid address; bad credentials; unknown, locked or unapproved account; rate limited; or locked by `account_lockout_threshold` failures in a row, even with the right password |
+| 401 | `{"success":false,"error":"Invalid email or password"}` | anything that is not a valid address (or, with RADIUS on, a valid name); bad credentials; unknown, locked or unapproved account; an Access-Reject; rate limited; or locked by `account_lockout_threshold` failures in a row, even with the right password |
 | 403 | `{"success":false,"error":"Password sign-in is disabled"}` | `auth_methods.password` is disabled |
 | 403 | `{"success":false,"error":"Sign-in refused"}` | claims hook failed or denied under `on_failure: fail-closed` |
 | 500 | `text/plain` | template failure |
+| 503 | `{"success":false,"error":"Sign-in is unavailable. Try again later."}` | no RADIUS server gave a valid reply, for a name the CSV file lacks |
 
 Redirect target precedence: posted `referrer` → `?referrer=` → HTTP `Referer`
 → `/account`. This instance's `/login`, `/register`, `/recover` and `/logout` are never a
@@ -203,8 +206,11 @@ Requires the cookie. `200`:
 }
 ```
 
-`method` is one of `password`, `email_pin`, `webauthn`. Also sets the response
-headers `Remote-User` and `Remote-Email` to the address.
+`method` is one of `password`, `email_pin`, `webauthn`, `radius`, or one of
+them with the second step after a `+` (`password+totp`). Also sets the response
+header `Remote-User` to the account, and `Remote-Email` to it when it is a mail
+address. A RADIUS account named `jdoe` has `"user":"jdoe"`, `"email":""` and no
+`Remote-Email`.
 
 `avatar` is the account's picture (section 4.7d): `public_url`, then `base_path`, then
 `/avatar/{id}`, or only the path when `public_url` is not set. It is `null` when the account has
@@ -221,7 +227,8 @@ Other `error` values: `cookie not found: http: named cookie not present`,
 `invalid cookie signature`, `invalid cookie format`, `session expired`.
 
 `?claims=refresh` re-runs the claims hook and returns the new claims with
-`"claims_refreshed": true`; without a hook it is a no-op. Each run starts a
+`"claims_refreshed": true`; without a hook it is a no-op. For a RADIUS account
+the hook is given the reply stored at sign-in. Each run starts a
 program, so an account gets `claims_hook.refresh_rate_limit` runs in
 `claims_hook.refresh_rate_window` seconds (6 in 60 by default). Past that the
 stored claims are answered with `"claims_refreshed": false`, as when the hook
@@ -377,6 +384,29 @@ reply names it in `step`: `"code"` (above; `totp_required` is true only for it),
 
 The account page refuses with `409` to remove an account's last app or key, unless
 `second_factor_methods` lists `email_pin`.
+
+A RADIUS account (section 4.7e) takes only `"code"` or `"enrol"`, and at `"enrol"` only an app:
+`.EnrolKey` is false and `action=key` answers `403`.
+
+### 4.7e RADIUS accounts
+
+With `radius.enabled`, a password for a name the CSV file does not have is checked by RADIUS servers
+(signet-config.yaml(5)). A name the file has never goes to them.
+
+- **Access-Accept**: as a password. The session's `method` is `radius`, and its `claims` are
+  `{"groups":[...]}` from `radius.group_attributes`, or the claims hook's answer (signet-hooks(5)).
+  An app's code may follow (`radius+totp`).
+- **Access-Challenge**: no session. JSON gets
+  `{"success":false,"step":"radius","pending":"...","message":"<the server's Reply-Message>"}`;
+  a form gets the page asking for it. `POST /login` with `pending` and `code` set to the answer
+  sends it to the server that asked, with its `State`. The step is spent by that one answer, lasts
+  five minutes, and a sign-in answers at most three challenges.
+- **Access-Reject**: `401`, counted as a failed sign-in.
+- **No valid reply** from any server: `503`. Not counted against the account.
+
+A RADIUS account has no password, PIN, recovery, registration or security key here: those answer as
+for an unknown address. `/account` shows its apps and picture, and refuses a password change with
+`403`.
 
 ### 4.8 `POST /email-pin/send`
 
@@ -544,7 +574,7 @@ is configured; `404` otherwise.
 | 405 | method not allowed on a known path |
 | 429 | too many PIN requests, or validation calls over the client budget |
 | 500 | internal error, template failure |
-| 503 | auth method disabled (`/email-pin/*`) |
+| 503 | auth method disabled (`/email-pin/*`), or no RADIUS server answered (`POST /login`) |
 
 ---
 
@@ -646,6 +676,7 @@ await fetch('/logout', { method: 'POST', headers: { 'Accept': 'application/json'
 | `mail_link_rate_limit`, `mail_link_rate_window`, `mail_link_source_rate_limit`, `mail_link_source_rate_window` | messages with a link, per address and per client address |
 | `api_rate_limit`, `api_rate_window` | per-client budget for `/api/v1/validate` (0 disables) |
 | `avatars`, `avatar_size`, `avatar_rate_limit`, `avatar_rate_window` | whether `/avatar/` and the picture actions exist, the side in pixels an upload must have, and uploads per account per window |
+| `radius.*` | whether names the CSV file lacks are checked by RADIUS, and the `radius` step, `503` and `groups` claims that brings |
 
 API clients live in the `api_clients` table and are managed with
 `signet client-add`, `client-list` and `client-revoke`; only a hash of each key

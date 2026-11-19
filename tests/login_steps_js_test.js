@@ -82,7 +82,22 @@ test('adding a second factor posts the token for the server to draw the page', (
 });
 
 test('both sign-in replies hand any second step to askForStep', () => {
-  const calls = html.match(/if \(data\.pending\) \{\s*askForStep\(data\.pending, data\.step \|\| 'code'\);/g) || [];
+  const calls = html.match(/if \(data\.pending\) \{\s*askForStep\(data\.pending, data\.step \|\| 'code', data\.message\);/g) || [];
   assert.strictEqual(calls.length, 2, 'the password and the PIN replies');
   assert.ok(!/data\.totp_required/.test(html), 'no branch on totp_required alone');
+});
+
+test('a RADIUS challenge shows the server\'s prompt as text', () => {
+  const { context, elements } = page();
+  context.askForStep('tok', 'radius', '<b>Enter the code</b> from your token');
+  assert.strictEqual(elements['code-form'].hidden, false);
+  assert.strictEqual(elements['code-pending'].value, 'tok');
+  assert.strictEqual(elements['code-label'].textContent, '<b>Enter the code</b> from your token');
+  assert.strictEqual(elements['code-hint'].hidden, true, 'no recovery-code hint for a challenge');
+});
+
+test('a RADIUS challenge without a prompt still asks', () => {
+  const { context, elements } = page();
+  context.askForStep('tok', 'radius', '');
+  assert.match(elements['code-label'].textContent, /one more answer/);
 });

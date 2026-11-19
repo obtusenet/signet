@@ -65,8 +65,9 @@ fi
 echo "Installing examples..."
 mkdir -p ${SIGNET_DOCS}/examples
 cp -r examples/hooks ${SIGNET_DOCS}/examples/
+cp -r examples/radius ${SIGNET_DOCS}/examples/
 cp -r examples/web-servers ${SIGNET_DOCS}/examples/
-chmod 755 ${SIGNET_DOCS}/examples/hooks/claims-hook.sh ${SIGNET_DOCS}/examples/hooks/claims-hook.py ${SIGNET_DOCS}/examples/hooks/test-hooks.sh 2>/dev/null || true
+chmod 755 ${SIGNET_DOCS}/examples/hooks/claims-hook.sh ${SIGNET_DOCS}/examples/hooks/claims-hook.py ${SIGNET_DOCS}/examples/hooks/radius-claims.py ${SIGNET_DOCS}/examples/hooks/test-hooks.sh 2>/dev/null || true
 chmod 644 ${SIGNET_DOCS}/examples/hooks/README.md ${SIGNET_DOCS}/examples/web-servers/README.md 2>/dev/null || true
 install -m 644 LICENSE ${SIGNET_DOCS}/LICENSE
 

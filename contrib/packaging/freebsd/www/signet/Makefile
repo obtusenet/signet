@@ -63,7 +63,7 @@ do-install:
 
 do-install-EXAMPLES-on:
 	${MKDIR} ${STAGEDIR}${EXAMPLESDIR}
-	cd ${WRKSRC}/examples && ${COPYTREE_SHARE} "hooks web-servers" ${STAGEDIR}${EXAMPLESDIR}
+	cd ${WRKSRC}/examples && ${COPYTREE_SHARE} "hooks radius web-servers" ${STAGEDIR}${EXAMPLESDIR}
 	${INSTALL_SCRIPT} ${WRKSRC}/examples/hooks/*.sh ${STAGEDIR}${EXAMPLESDIR}/hooks/
 
 .include <bsd.port.mk>

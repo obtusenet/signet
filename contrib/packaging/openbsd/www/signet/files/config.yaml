@@ -127,6 +127,21 @@ claims_hook:
   refresh_rate_limit: 6
   refresh_rate_window: 60
 
+# RADIUS: check the passwords of names users.csv does not have with RADIUS
+# servers (RFC 2865, over UDP).  An address in users.csv never goes to them.
+# The reply's groups become the claim "groups", or reach the claims hook.
+radius:
+  enabled: false
+  nas_identifier: "wiki"            # this application, as the servers see it
+  servers:                          # tried in order
+    - address: "radius.example.com" # port 1812 unless given
+      secret_file: "/etc/signet/radius.secret"   # or secret: "..."
+      auth: "pap"                   # or "mschapv2"
+  timeout_seconds: 3                # per try
+  retries: 2                        # more tries per server
+  group_attributes: ["Filter-Id"]   # also "Class", or "vendor:<id>:<type>"
+  require_message_authenticator: true   # replies without one are dropped
+
 # API
 api_rate_limit: 60
 api_rate_window: 60

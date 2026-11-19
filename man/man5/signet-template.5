@@ -63,6 +63,9 @@ which says whether the sign-in is recent enough to change anything,
 .Va .PasswordEnabled ,
 .Va .HasPassword ,
 .Va .WebAuthnEnabled ,
+.Va .RadiusAccount ,
+true for an account whose password is a RADIUS server's, which has neither a
+password nor keys here,
 .Va .TOTPEnabled ,
 .Va .TOTPKeys ,
 each with
@@ -165,6 +168,16 @@ Boolean.
 True when
 .Va auth_methods.totp
 is enabled.
+.It Va .RadiusEnabled
+Boolean.
+True when
+.Va radius.enabled
+is, and a name that is not a mail address may sign in by password.
+The shipped template then asks for an
+.Dq email address or user name
+in a text field, since a browser refuses a plain name in an
+.Li email
+field.
 .It Va .Pending
 The token of the second step of a sign-in, or the empty string.
 The shipped template then shows a form posting it with
@@ -185,7 +198,13 @@ Which second step the page is at, or the empty string:
 .Dq code
 for a code from an authenticator app,
 .Dq mail
-for a PIN mailed after a password, or
+for a PIN mailed after a password,
+.Dq radius
+for the answer to a RADIUS server's challenge, posted as
+.Li code ,
+with the server's prompt in
+.Va .Message ,
+or
 .Dq enrol
 for adding a second factor.
 .It Va .EnrolTOTP , .EnrolKey

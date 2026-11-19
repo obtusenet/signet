@@ -12,6 +12,7 @@ what the cookie means. An application never sees a password, a key or a PIN.
 
 ```
 browser ── web server ──┬── Signet ── users.csv (accounts)
+                        │      ├───── RADIUS servers (other accounts' passwords, groups)
                         │      ├───── SQLite (sessions, keys, clients, pictures)
                         │      ├───── sendmail (PINs, links, notices)
                         │      └───── claims hook (roles, groups)
@@ -111,6 +112,34 @@ A RADIUS backend for accounts is planned and not built.
 - **Changing the account** (password, keys, TOTP, picture) needs a sign-in within
   `account_reauth_window`. Every change except a picture mails the owner a notice.
 
+## RADIUS accounts
+
+- **Signet is a RADIUS client** (RFC 2865, UDP; no RadSec yet), for passwords of names
+  `users.csv` does not have. A name the file has, in any state, never goes to RADIUS,
+  so local accounts work while the servers are down and their passwords stay here.
+- **The client is Signet's own**, on the standard library and `x/crypto/md4`: PAP
+  (§5.2) and MS-CHAPv2 (RFC 2759), several servers in order, retries that keep the
+  identifier and authenticator.
+- **Replies are proved:** the Response Authenticator always, `Message-Authenticator`
+  (RFC 3579 §3.2) in every request and, by default, required in every reply against
+  forged replies (CVE-2024-3596). An MS-CHAPv2 Accept must carry the server's proof
+  that it knew the password (`MS-CHAP2-Success`, RFC 2759 §8.7).
+- **One application per instance**, named to the servers as `NAS-Identifier`. One
+  session serves every application behind an instance, so per-application answers
+  need per-application instances, as `base_path` already allows.
+- **Groups are claims.** `radius.group_attributes` (`Filter-Id` by default; there is
+  no standard group attribute) become `{"groups":[...]}`, or the claims hook gets the
+  whole reply and answers the claims. The reply is kept with the session, so a claims
+  refresh sees what the sign-in saw: Signet cannot ask again without the password.
+- **The server's decision is final.** A RADIUS account has no password, mailed PIN,
+  recovery or key here, since each would sign it in without the server and without
+  groups. An authenticator app may follow its password as a second factor.
+- **Access-Challenge** becomes a step, like the code step: the server's prompt, one
+  answer per challenge, sent with `State` to the server that asked.
+- **No answer fails closed** with `503`, and is not counted against the account.
+- PAP over UDP and MS-CHAPv2 are weak against someone on the network path. Keep
+  RADIUS on a trusted network, or under IPsec.
+
 ## Limits and lockout
 
 - **Rate limits** are sliding windows kept in memory, per process: failed passwords
@@ -187,5 +216,6 @@ A RADIUS backend for accounts is planned and not built.
 
 - `log_level`: every level is logged.
 - One session per account (`multi_device: disabled`).
-- RADIUS accounts.
+- RadSec (RADIUS over TLS, RFC 6614).
+- A security key as the second factor after a RADIUS password.
 - Rate limits shared between instances.

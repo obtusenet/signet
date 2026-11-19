@@ -132,6 +132,12 @@ func NewTOTPStore(db *sql.DB, secret []byte, issuer string) (*TOTPStore, error) 
 		!strings.Contains(err.Error(), "duplicate column") {
 		return nil, fmt.Errorf("adding the step column: %w", err)
 	}
+	// What the step carries forward: a RADIUS challenge's State, and the facts
+	// the session will keep.  Opaque here.
+	if _, err := db.Exec(`ALTER TABLE totp_pending ADD COLUMN data TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return nil, fmt.Errorf("adding the data column: %w", err)
+	}
 	return &TOTPStore{db: db, aead: aead, issuer: issuer}, nil
 }
 
@@ -514,10 +520,14 @@ func LooksLikeRecoveryCode(code string) bool {
 
 // The second steps of a sign-in.
 const (
-	StepCode  = "code"  // a code from an authenticator app, or a recovery code
-	StepMail  = "mail"  // a PIN mailed after a password
-	StepEnrol = "enrol" // add a second factor; the account has none
+	StepCode   = "code"   // a code from an authenticator app, or a recovery code
+	StepMail   = "mail"   // a PIN mailed after a password
+	StepEnrol  = "enrol"  // add a second factor; the account has none
+	StepRadius = "radius" // answer a RADIUS server's challenge
 )
+
+// PendingTTL is how long the code step waits.
+const PendingTTL = pendingTTL
 
 // CreatePending records that an account passed its first step by method.  The token
 // allows only the code step, and only for a few minutes.
@@ -528,6 +538,11 @@ func (s *TOTPStore) CreatePending(ctx context.Context, email, method string) (st
 // CreateStep records that an account passed its first step by method, and must
 // take step next.  The token allows only that step, for ttl.
 func (s *TOTPStore) CreateStep(ctx context.Context, email, method, step string, ttl time.Duration) (string, error) {
+	return s.CreateStepData(ctx, email, method, step, ttl, "")
+}
+
+// CreateStepData is CreateStep with data the step carries forward.
+func (s *TOTPStore) CreateStepData(ctx context.Context, email, method, step string, ttl time.Duration, data string) (string, error) {
 	token, err := randomID()
 	if err != nil {
 		return "", err
@@ -537,8 +552,8 @@ func (s *TOTPStore) CreateStep(ctx context.Context, email, method, step string, 
 		return "", err
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO totp_pending (token_hash, email, method, step, expires_unix) VALUES (?, ?, ?, ?, ?)`,
-		hashSecret(token), email, method, step, now.Add(ttl).Unix()); err != nil {
+		`INSERT INTO totp_pending (token_hash, email, method, step, data, expires_unix) VALUES (?, ?, ?, ?, ?, ?)`,
+		hashSecret(token), email, method, step, data, now.Add(ttl).Unix()); err != nil {
 		return "", fmt.Errorf("storing a sign-in step: %w", err)
 	}
 	return token, nil
@@ -560,6 +575,18 @@ func (s *TOTPStore) Step(ctx context.Context, token string) (email, method, step
 		return "", "", "", ErrNoPending
 	}
 	return email, method, step, err
+}
+
+// StepData answers what a live step carries forward.
+func (s *TOTPStore) StepData(ctx context.Context, token string) (string, error) {
+	var data string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT data FROM totp_pending WHERE token_hash = ? AND expires_unix >= ?`,
+		hashSecret(token), time.Now().Unix()).Scan(&data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNoPending
+	}
+	return data, err
 }
 
 // TakePending spends a token.  The delete decides, so only one request gets it.

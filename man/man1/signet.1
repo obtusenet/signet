@@ -82,6 +82,10 @@
 is a web authentication system.
 Users sign in with a password, a WebAuthn security key, or a PIN sent by email,
 optionally followed by a TOTP code, and receive a signed session cookie.
+Passwords are checked against the CSV file, or, for names it does not have and
+with
+.Va radius.enabled ,
+by RADIUS servers.
 .Pp
 .Nm
 reads its configuration from a YAML file
@@ -441,6 +445,10 @@ was first released in 2026.
 Removing an account from the CSV file by hand, or setting its
 .Dq locked
 flag, stops new logins but leaves existing sessions valid until they expire.
+.Pp
+The account commands work on the CSV file only.
+A RADIUS account is disabled on its server, and its sessions here last until
+they expire.
 Use
 .Cm user-delete
 to end them.

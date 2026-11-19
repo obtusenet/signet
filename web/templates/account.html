@@ -307,6 +307,13 @@
     </section>
     {{end}}
 
+    {{if .RadiusAccount}}
+    <section id="password-section">
+      <h2>Password</h2>
+      <p>Your password belongs to your organisation's sign-in server (RADIUS). Change it there.</p>
+    </section>
+    {{end}}
+
     {{if .PasswordEnabled}}
     <section id="password-section">
       <h2>Password</h2>

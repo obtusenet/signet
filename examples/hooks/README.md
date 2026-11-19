@@ -16,9 +16,15 @@ Signet sends a JSON line to the hook's stdin:
 ```json
 {
   "type": "claim_request",
-  "email": "user@example.com"
+  "email": "user@example.com",
+  "source": "local"
 }
 ```
+
+For an account a RADIUS server accepted, `source` is `"radius"`, and a `radius`
+member carries the application, the groups and every reply attribute.
+`radius-claims.py` turns those groups into a role; see `signet-hooks(5)` and
+`examples/radius/`.
 
 ### Response (Hook → Signet)
 

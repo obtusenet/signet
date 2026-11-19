@@ -8,15 +8,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/obtusenet/signet/internal/clientaddr"
 	"github.com/obtusenet/signet/internal/password"
+	"github.com/obtusenet/signet/internal/radius"
 )
 
 // Config holds all application configuration
@@ -121,6 +124,9 @@ type Config struct {
 	Mail       MailConfig       `yaml:"mail"`
 	ClaimsHook ClaimsHookConfig `yaml:"claims_hook"`
 
+	// Radius checks the passwords of addresses users.csv does not have.
+	Radius RadiusConfig `yaml:"radius"`
+
 	AuthMethods map[string]string `yaml:"auth_methods"`
 
 	// Legacy names the keys LoadConfig still reads by hand, renamed or removed
@@ -147,6 +153,29 @@ type MailConfig struct {
 	// FromAddress is the sender's address; empty leaves it to the mail system.
 	FromAddress string `yaml:"from_address"`
 	FromName    string `yaml:"from_name"`
+}
+
+// RadiusConfig is the RADIUS client: the servers to ask, in order, about
+// addresses users.csv does not have.
+type RadiusConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// NASIdentifier names this application to the servers (RFC 2865 §5.32).
+	NASIdentifier string               `yaml:"nas_identifier"`
+	Servers       []RadiusServerConfig `yaml:"servers"`
+	TimeoutSec    int                  `yaml:"timeout_seconds"`
+	Retries       int                  `yaml:"retries"`
+	// GroupAttributes are the reply attributes whose values are groups.
+	GroupAttributes []string `yaml:"group_attributes"`
+	// RequireMessageAuthenticator drops replies without one (CVE-2024-3596).
+	RequireMessageAuthenticator bool `yaml:"require_message_authenticator"`
+}
+
+// RadiusServerConfig is one server.  Exactly one of Secret and SecretFile.
+type RadiusServerConfig struct {
+	Address    string `yaml:"address"` // host:port; the port defaults to 1812
+	Secret     string `yaml:"secret"`
+	SecretFile string `yaml:"secret_file"`
+	Auth       string `yaml:"auth"` // "pap" (default) or "mschapv2"
 }
 
 // ClaimsHookConfig holds external claims hook configuration
@@ -229,6 +258,12 @@ func DefaultConfig() *Config {
 			OnFailure:         "fail-closed",
 			RefreshRateLimit:  6,
 			RefreshRateWindow: 60,
+		},
+		Radius: RadiusConfig{
+			TimeoutSec:                  3,
+			Retries:                     2,
+			GroupAttributes:             []string{"Filter-Id"},
+			RequireMessageAuthenticator: true,
 		},
 		SecondFactor:        "optional",
 		SecondFactorMethods: []string{"totp", "webauthn"},
@@ -526,6 +561,72 @@ func Validate(cfg *Config) error {
 	}
 	if cfg.ClaimsHook.RefreshRateLimit <= 0 || cfg.ClaimsHook.RefreshRateWindow <= 0 {
 		return fmt.Errorf("claims_hook.refresh_rate_limit and claims_hook.refresh_rate_window must be positive")
+	}
+	if err := validateRadius(cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateRadius checks the radius block when it is on, and gives each server
+// address its port.
+func validateRadius(cfg *Config) error {
+	r := &cfg.Radius
+	if !r.Enabled {
+		return nil
+	}
+	if !cfg.MethodEnabled("password") {
+		return fmt.Errorf("radius.enabled needs auth_methods.password: RADIUS checks passwords")
+	}
+	if r.NASIdentifier == "" || len(r.NASIdentifier) > 253 || strings.ContainsFunc(r.NASIdentifier, unicode.IsControl) {
+		return fmt.Errorf("radius.nas_identifier must name this application to the RADIUS servers, in 1 to 253 bytes")
+	}
+	if len(r.Servers) == 0 {
+		return fmt.Errorf("radius.servers must list at least one server")
+	}
+	for i := range r.Servers {
+		srv := &r.Servers[i]
+		if srv.Address == "" {
+			return fmt.Errorf("radius.servers[%d].address is empty", i)
+		}
+		if _, _, err := net.SplitHostPort(srv.Address); err != nil {
+			srv.Address = net.JoinHostPort(strings.Trim(srv.Address, "[]"), "1812")
+		}
+		if _, port, err := net.SplitHostPort(srv.Address); err != nil || port == "" {
+			return fmt.Errorf("radius.servers[%d].address %q must be host or host:port", i, srv.Address)
+		}
+		if (srv.Secret == "") == (srv.SecretFile == "") {
+			return fmt.Errorf("radius.servers[%d] (%s) needs exactly one of secret and secret_file", i, srv.Address)
+		}
+		// Read here too, so a reload with an unreadable file keeps the
+		// running server.
+		if srv.SecretFile != "" {
+			b, err := os.ReadFile(srv.SecretFile)
+			if err != nil {
+				return fmt.Errorf("radius.servers[%d].secret_file: %w", i, err)
+			}
+			if strings.TrimRight(string(b), "\r\n") == "" {
+				return fmt.Errorf("radius.servers[%d].secret_file %s is empty", i, srv.SecretFile)
+			}
+		}
+		switch srv.Auth {
+		case "":
+			srv.Auth = "pap"
+		case "pap", "mschapv2":
+		default:
+			return fmt.Errorf("radius.servers[%d].auth must be pap or mschapv2, not %q", i, srv.Auth)
+		}
+	}
+	if r.TimeoutSec < 1 || r.TimeoutSec > 60 {
+		return fmt.Errorf("radius.timeout_seconds must be 1 to 60")
+	}
+	if r.Retries < 0 || r.Retries > 10 {
+		return fmt.Errorf("radius.retries must be 0 to 10")
+	}
+	for _, a := range r.GroupAttributes {
+		if _, err := radius.ParseGroupAttribute(a); err != nil {
+			return fmt.Errorf("radius.group_attributes: %w", err)
+		}
 	}
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/obtusenet/signet/internal/cookie"
 	"github.com/obtusenet/signet/internal/logging"
 	"github.com/obtusenet/signet/internal/password"
+	"github.com/obtusenet/signet/internal/radius"
 	"github.com/obtusenet/signet/internal/session"
 )
 
@@ -37,7 +38,8 @@ func (e *SecondStepRequired) Error() string {
 
 // SecondStep decides whether an account that passed the first step, by method,
 // must take a second, and answers the token for that step and which it is, or "".
-type SecondStep func(ctx context.Context, email, method string) (pending, step string, err error)
+// facts are what the first step learned, for the session the step will make.
+type SecondStep func(ctx context.Context, email, method string, facts claims.Facts) (pending, step string, err error)
 
 // ErrUseSecurityKey reports that second_factor is required and the account has a
 // security key, its only second factor: the key signs in by itself.
@@ -63,7 +65,8 @@ type PasswordAuth struct {
 	maxAge       int
 	claimsHook   *claims.ClaimsHook
 	secondStep   SecondStep
-	lockout      *Lockout // consecutive failures per account; nil when off
+	lockout      *Lockout      // consecutive failures per account; nil when off
+	radius       *RadiusSource // addresses users.csv lacks; nil when off
 
 	// dummyHash is verified when there is no real hash to check, so a login
 	// costs the same whether or not the address exists.
@@ -241,8 +244,12 @@ func (pa *PasswordAuth) Authenticate(ctx context.Context, email, source, passwor
 		return nil, err
 	}
 
-	// Look up user
+	// Look up user.  An address users.csv lacks goes to RADIUS when it is on;
+	// one it has, in any state, never does.
 	user, err := pa.accounts.Check(email)
+	if errors.Is(err, csv.ErrUserNotFound) && pa.radius != nil {
+		return pa.radiusSignIn(ctx, done, radius.Request{UserName: email, Password: passwordStr, CallingStationID: source})
+	}
 	if err != nil {
 		// Unknown, locked and unapproved accounts all pay for a hash and
 		// count as a failure, so neither the reply nor its timing tells
@@ -275,7 +282,7 @@ func (pa *PasswordAuth) Authenticate(ctx context.Context, email, source, passwor
 	}
 
 	if pa.secondStep != nil {
-		pending, step, err := pa.secondStep(ctx, email, "password")
+		pending, step, err := pa.secondStep(ctx, email, "password", claims.LocalFacts)
 		if err != nil {
 			return nil, err
 		}
@@ -286,25 +293,29 @@ func (pa *PasswordAuth) Authenticate(ctx context.Context, email, source, passwor
 	return pa.CreateSession(ctx, email, "password")
 }
 
-// CreateSession signs an account in, once every step is done.  method is what the
-// session records as how.
+// CreateSession signs a users.csv account in, once every step is done.  method is
+// what the session records as how.
 func (pa *PasswordAuth) CreateSession(ctx context.Context, email, method string) (*http.Cookie, error) {
+	return pa.CreateSessionFacts(ctx, email, method, claims.LocalFacts)
+}
+
+// CreateSessionFacts signs an account in with what its sign-in learned, which
+// the claims are made from and the session keeps.
+func (pa *PasswordAuth) CreateSessionFacts(ctx context.Context, email, method string, facts claims.Facts) (*http.Cookie, error) {
 	// Generate session token
 	token, err := cookie.GenerateRandomToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate token: %w", err)
 	}
 
-	// Call claims hook to get user claims
-	claimsData := map[string]interface{}{}
-	if pa.claimsHook != nil {
-		hookClaims, err := pa.claimsHook.GetClaims(ctx, email)
-		if err != nil {
-			// GetClaims only errors under on_failure: fail-closed.
-			return nil, fmt.Errorf("%w: %v", ErrClaimsRefused, err)
-		} else if hookClaims != nil {
-			claimsData = hookClaims
-		}
+	// The hook's claims, or the facts' own without one.
+	claimsData, err := pa.claimsHook.ClaimsFor(ctx, email, facts)
+	if err != nil {
+		// ClaimsFor only errors under on_failure: fail-closed.
+		return nil, fmt.Errorf("%w: %v", ErrClaimsRefused, err)
+	}
+	if claimsData == nil {
+		claimsData = map[string]interface{}{}
 	}
 
 	// Serialize claims to JSON
@@ -321,6 +332,7 @@ func (pa *PasswordAuth) CreateSession(ctx context.Context, email, method string)
 		UserEmail:  email,
 		AuthMethod: method,
 		Claims:     string(claimsJSON),
+		Facts:      facts.String(),
 		CreatedAt:  now,
 		ExpiresAt:  now.Add(time.Duration(pa.maxAge) * time.Second),
 	}

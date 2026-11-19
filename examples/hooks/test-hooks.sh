@@ -59,6 +59,24 @@ for hook in claims-hook.py claims-hook.sh; do
     fi
 done
 
+# radius-claims.py: a role from the RADIUS groups.
+path="$SCRIPT_DIR/radius-claims.py"
+req='{"type":"claim_request","email":"jdoe","source":"radius","radius":{"nas_identifier":"wiki","groups":["staff","wiki-editors"],"attributes":[]}}'
+output=$(printf '%s\n' "$req" | timeout 5 "$path" 2>/dev/null)
+check "radius-claims.py answers a request" "$output" '"type": *"claim_response"'
+check "radius-claims.py takes the role from the groups" "$output" '"role": *"editor"'
+check "radius-claims.py passes the groups on" "$output" '"groups": *\["staff", *"wiki-editors"\]'
+check "radius-claims.py names the application" "$output" '"application": *"wiki"'
+output=$(printf '%s\n' "$REQUEST" | timeout 5 "$path" 2>/dev/null)
+check "radius-claims.py gives a local account the default role" "$output" '"role": *"user"'
+output=$(printf 'not valid json\n' | timeout 5 "$path" 2>/dev/null)
+if printf '%s' "$output" | grep -q '"claim_response"'; then
+    echo "FAIL - radius-claims.py granted claims for invalid JSON: $output"
+    failures=$((failures + 1))
+else
+    echo "ok   - radius-claims.py grants nothing for invalid JSON"
+fi
+
 if [ "$failures" -ne 0 ]; then
     echo "$failures check(s) failed"
     exit 1

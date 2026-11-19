@@ -14,10 +14,11 @@ it runs on OpenBSD, FreeBSD and Linux, behind Caddy, nginx or OpenBSD's httpd.
 - **Sign-in methods:** passwords (argon2id or bcrypt), security keys and passkeys
   (WebAuthn), a PIN sent by mail, and TOTP codes from an authenticator app as a
   second step.
-- **Accounts:** self-registration with mail verification and optional approval,
-  password recovery by mail, an `/account` page for passwords, keys, TOTP and a
-  picture, lockout after repeated failures, and a `signet` command for
-  administrators.
+- **Accounts:** in a CSV file, or on RADIUS servers (PAP or MS-CHAPv2, with
+  groups) for names the file does not have. Self-registration with mail
+  verification and optional approval, password recovery by mail, an `/account`
+  page for passwords, keys, TOTP and a picture, lockout after repeated failures,
+  and a `signet` command for administrators.
 - **For applications:**
   - `GET /session` answers whose cookie it is, and sets `Remote-User` and
     `Remote-Email` headers, so a web server can use it for forward-auth.
@@ -263,6 +264,23 @@ is your mail system's decision.
 | `claims_hook.program` | none | Its path; `examples/hooks/` has samples |
 | `claims_hook.timeout_seconds` | `5` | |
 | `claims_hook.on_failure` | `fail-closed` | `fail-closed` refuses the sign-in when the hook fails; `fail-open` signs in with no claims |
+
+### RADIUS
+
+Names that `users.csv` does not have can sign in with a password that RADIUS servers
+check (RFC 2865, over UDP). A name in `users.csv` never goes to them. The reply's
+groups become the claim `groups`, or reach the claims hook. A server's challenge
+becomes one more step, and an authenticator app may follow as a second factor.
+`docs/DESIGN.md` says what such an account can and cannot do here.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `radius.enabled` | `false` | |
+| `radius.nas_identifier` | none | The application, sent as `NAS-Identifier` so a server can answer each one differently; required |
+| `radius.servers` | none | Tried in order; each has `address` (port 1812 unless given), `secret` or `secret_file`, and `auth`: `pap` (default) or `mschapv2` |
+| `radius.timeout_seconds`, `radius.retries` | `3`, `2` | Per try, and more tries per server |
+| `radius.group_attributes` | `[Filter-Id]` | The reply attributes that are groups: `Filter-Id`, `Class`, a number, or `vendor:<id>:<type>` |
+| `radius.require_message_authenticator` | `true` | Drop replies without one (CVE-2024-3596) |
 
 ### Logging
 

@@ -3,7 +3,7 @@
 
 .PHONY: vuln vuln-box vuln-host vuln-current build-current test-go-current all build test regress test-go test-js test-hooks test-license test-configs test-sbom sbom configs test-unit test-e2e test-web-servers clean run \
 	fmt vet lint install distfile man install-man \
-	build-package deploy-package box check-dist release docker-image test-docker test-web test-linux deb test-deb freebsd-package test-freebsd
+	build-package deploy-package box check-dist release docker-image test-docker test-radius test-web test-linux deb test-deb freebsd-package test-freebsd
 
 BINARY_NAME=signet
 BUILD_DIR=build
@@ -106,6 +106,11 @@ docker-image:
 
 test-docker: docker-image
 	tests/docker_test.sh
+
+# Signet against FreeRADIUS (pinned by digest) in Docker: PAP, MS-CHAPv2, groups,
+# NAS-Identifier, a challenge.  Pulls the image; not part of `make test`.
+test-radius: all
+	tests/radius_test.sh $(BUILD_DIR)/$(BINARY_NAME)
 
 # examples/web-servers/ as shipped, on the test box, with throwaway instances on
 # spare ports; running services are left alone.  Not part of `make test`.

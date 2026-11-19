@@ -326,7 +326,7 @@ func (e *EmailPINAuth) VerifyPINRequest(w http.ResponseWriter, r *http.Request) 
 	e.logger.Info(fmt.Sprintf("PIN verified successfully: email=%s", req.Email))
 
 	if e.secondStep != nil {
-		pending, step, err := e.secondStep(r.Context(), req.Email, "email_pin")
+		pending, step, err := e.secondStep(r.Context(), req.Email, "email_pin", claims.LocalFacts)
 		if errors.Is(err, ErrUseSecurityKey) || errors.Is(err, ErrNoSecondFactor) {
 			e.logger.Warn(fmt.Sprintf("PIN sign-in of %s stopped: %v", req.Email, err))
 			writeJSONError(w, http.StatusForbidden, SecondFactorMessage(err))

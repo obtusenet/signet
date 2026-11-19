@@ -39,6 +39,8 @@ created;
 for
 .Li GET /session?claims=refresh ,
 with the token of the existing session.
+A RADIUS account's request then carries the reply stored at sign-in:
+Signet cannot ask the server again without the password.
 .El
 .Ss The process
 The program is executed directly, not through a shell, with no arguments.
@@ -52,18 +54,68 @@ The login waits for the hook, so a slow hook is a slow login.
 .Ss Request
 Signet writes one line of JSON to the hook's standard input and closes it:
 .Bd -literal -offset indent
-{"type":"claim_request","email":"user@example.com"}
+{"type":"claim_request","email":"user@example.com","source":"local"}
 .Ed
-.Bl -tag -width email
+.Bl -tag -width source
 .It Li type
 Always
 .Dq claim_request .
 .It Li email
-The address the user signed in with.
+The account: the address the user signed in with, or for a RADIUS account the
+name exactly as typed, which need not be an address.
+.It Li source
+Where the account is:
+.Dq local
+for the CSV file, or
+.Dq radius
+for one a RADIUS server accepted.
+.It Li radius
+With
+.Dq radius
+only, what the server's Access-Accept said:
+.Bl -tag -width nas_identifier
+.It Li nas_identifier
+The application, as
+.Li radius.nas_identifier
+names it.
+.It Li groups
+The values of
+.Li radius.group_attributes ,
+in order, without repeats; an empty array when there are none.
+.It Li attributes
+Every attribute of the reply but
+.Li Message-Authenticator ,
+in order, each with
+.Li type
+and, when Signet knows it,
+.Li name .
+A vendor attribute has
+.Li vendor
+and
+.Li vendor_type .
+Text, integers and addresses are in
+.Li value ;
+anything else is in
+.Li hex .
 .El
+.El
+.Pp
+A RADIUS request:
+.Bd -literal -offset indent
+{"type":"claim_request","email":"jdoe","source":"radius",
+ "radius":{"nas_identifier":"wiki","groups":["wiki-admins"],
+  "attributes":[{"type":11,"name":"Filter-Id","value":"wiki-admins"},
+   {"type":26,"vendor":12356,"vendor_type":1,"value":"ops"}]}}
+.Ed
+.Pp
+The hook's claims replace the groups: to pass them on, answer them.
+Without a hook, a RADIUS account's claims are
+.Li {"groups":[...]} .
 .Pp
 A hook should ignore members it does not know,
 since a later version may add some.
+Versions before RADIUS support sent no
+.Li source .
 Versions before 0.13.24 also sent
 .Li session_token ,
 the session's bearer secret; it is no longer sent.

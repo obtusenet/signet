@@ -37,6 +37,7 @@ internal/
   auth/                password and PIN sign-in, account policy, rate limits, lockout
   webauthn/            security-key ceremonies, credentials, invites
   otp/                 TOTP
+  radius/              RADIUS client: PAP, MS-CHAPv2, Message-Authenticator, groups
   session/ cookie/     sessions (SQLite, tokens hashed) and signed cookies
   backend/csv/         accounts in users.csv, reloaded on change
   db/                  SQLite connection and migrations
@@ -75,6 +76,7 @@ These need Docker, and are not part of `make test`:
   vulnerability scan, with the newest Go release (`GO_IMAGE`, pinned by digest).
   `make test` uses this host's Go, which proves the minimum in `go.mod`.
 - `make test-docker`
+- `make test-radius`: Signet against FreeRADIUS in Docker
 - `make test-linux`
 - `make deb` and `make test-deb`
 

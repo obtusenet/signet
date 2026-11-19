@@ -43,7 +43,13 @@ func (s *Server) reauthWindow() time.Duration {
 
 // notifyAccountChange tells an account's mailbox about a change to the account,
 // which is how its owner hears of one they did not make.
+//
+// RADIUS accounts get none: their names need not be mailboxes, and a mailbox
+// that matches one need not be theirs.
 func (s *Server) notifyAccountChange(address, change string) {
+	if !s.isLocal(address) {
+		return
+	}
 	s.mailInBackground(func(ctx context.Context) {
 		if err := s.sendLinkMail(address, "A change to your Signet account", "account-change", email.AccountChangeFallback, &email.LinkMailData{
 			Email:   address,
@@ -90,12 +96,20 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderAccountPage(w http.ResponseWriter, r *http.Request, sess *session.Session) {
-	user, err := s.accounts.Check(sess.UserEmail)
-	if err != nil {
-		s.logger.Warn(fmt.Sprintf("account page refused for %s: %v", sess.UserEmail, err))
-		http.Error(w, "This account cannot sign in.", http.StatusForbidden)
-		return
+	// A RADIUS account has no password here and no keys: its password is the
+	// server's, and a key would sign it in without the server.
+	radiusAccount := s.isRadiusAccount(sess.UserEmail)
+	hasPassword := false
+	if !radiusAccount {
+		user, err := s.accounts.Check(sess.UserEmail)
+		if err != nil {
+			s.logger.Warn(fmt.Sprintf("account page refused for %s: %v", sess.UserEmail, err))
+			http.Error(w, "This account cannot sign in.", http.StatusForbidden)
+			return
+		}
+		hasPassword = user.PasswordHash != noPassword
 	}
+	var err error
 	var totpKeys []otp.TOTPKey
 	recoveryLeft := 0
 	if s.totp != nil {
@@ -112,9 +126,10 @@ func (s *Server) renderAccountPage(w http.ResponseWriter, r *http.Request, sess 
 	if err := s.renderTemplate(w, "account.html", map[string]interface{}{
 		"Email":           sess.UserEmail,
 		"Fresh":           time.Since(sess.CreatedAt) <= s.reauthWindow(),
-		"PasswordEnabled": s.authMethodEnabled("password"),
-		"HasPassword":     user.PasswordHash != noPassword,
-		"WebAuthnEnabled": s.webauthnHandler != nil,
+		"PasswordEnabled": s.authMethodEnabled("password") && !radiusAccount,
+		"HasPassword":     hasPassword,
+		"WebAuthnEnabled": s.webauthnHandler != nil && !radiusAccount,
+		"RadiusAccount":   radiusAccount,
 		"TOTPEnabled":     s.totp != nil,
 		"TOTPKeys":        totpKeys,
 		"RecoveryLeft":    recoveryLeft,

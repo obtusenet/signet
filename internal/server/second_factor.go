@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/obtusenet/signet/internal/auth"
+	"github.com/obtusenet/signet/internal/claims"
 	"github.com/obtusenet/signet/internal/otp"
 )
 
@@ -34,14 +35,19 @@ const spentStepPINMessage = "Too many wrong PINs. Start again."
 //  3. none, when the account has a security key: the key signs in by itself
 //     (auth.ErrUseSecurityKey);
 //  4. adding an app or a key, when the account has neither.
-func (s *Server) secondStep(ctx context.Context, address, method string) (string, string, error) {
+//
+// A RADIUS account (method auth.MethodRadius) takes only an app's code: its
+// address need not be a mailbox, and a key would sign it in without the server.
+func (s *Server) secondStep(ctx context.Context, address, method string, facts claims.Facts) (string, string, error) {
+	data := facts.String()
+	radiusAccount := method == auth.MethodRadius
 	if s.totp != nil {
 		has, err := s.totp.HasKeys(ctx, address)
 		if err != nil {
 			return "", "", fmt.Errorf("checking for TOTP keys: %w", err)
 		}
 		if has {
-			token, err := s.totp.CreatePending(ctx, address, method)
+			token, err := s.totp.CreateStepData(ctx, address, method, otp.StepCode, otp.PendingTTL, data)
 			return token, otp.StepCode, err
 		}
 	}
@@ -50,6 +56,13 @@ func (s *Server) secondStep(ctx context.Context, address, method string) (string
 	}
 	if s.steps == nil {
 		return "", "", errors.New("second_factor is required, but the sign-in steps are off")
+	}
+	if radiusAccount {
+		if !s.canEnrolTOTP() {
+			return "", "", auth.ErrNoSecondFactor
+		}
+		token, err := s.steps.CreateStepData(ctx, address, method, otp.StepEnrol, otp.EnrolStepTTL, data)
+		return token, otp.StepEnrol, err
 	}
 	if method == "password" && s.cfg.SecondFactorAllows("email_pin") && s.emailPINAuth != nil {
 		token, err := s.steps.CreateStep(ctx, address, method, otp.StepMail, mailStepTTL)
@@ -97,7 +110,8 @@ func (s *Server) askForStep(w http.ResponseWriter, r *http.Request, pending, ste
 	}
 	switch step {
 	case otp.StepEnrol:
-		s.renderEnrolStep(w, r, loginStep{Pending: pending}, http.StatusOK)
+		_, method, _, _ := s.steps.Step(r.Context(), pending)
+		s.renderEnrolStep(w, r, loginStep{Pending: pending, radius: method == auth.MethodRadius}, http.StatusOK)
 	default:
 		s.renderLoginStep(w, r, loginStep{Pending: pending, Step: step}, http.StatusOK)
 	}
@@ -105,10 +119,12 @@ func (s *Server) askForStep(w http.ResponseWriter, r *http.Request, pending, ste
 
 // stepSession signs in an account that has taken its second step.  On failure it
 // has answered, and ok is false.
-func (s *Server) stepSession(w http.ResponseWriter, r *http.Request, address, firstMethod, sessionMethod string) (*http.Cookie, bool) {
+func (s *Server) stepSession(w http.ResponseWriter, r *http.Request, address, firstMethod, sessionMethod string, facts claims.Facts) (*http.Cookie, bool) {
 	var authCookie *http.Cookie
 	var err error
-	if firstMethod == "email_pin" && s.emailPINAuth != nil {
+	if firstMethod == auth.MethodRadius {
+		authCookie, err = s.passwordAuth.CreateSessionFacts(r.Context(), address, sessionMethod, facts)
+	} else if firstMethod == "email_pin" && s.emailPINAuth != nil {
 		authCookie, err = s.emailPINAuth.CreateSession(r.Context(), address, sessionMethod)
 	} else {
 		authCookie, err = s.passwordAuth.CreateSession(r.Context(), address, sessionMethod)
@@ -127,7 +143,7 @@ func (s *Server) stepSession(w http.ResponseWriter, r *http.Request, address, fi
 }
 
 // finishMailStep takes the PIN mailed after a password.
-func (s *Server) finishMailStep(w http.ResponseWriter, r *http.Request, pending, address, method string) {
+func (s *Server) finishMailStep(w http.ResponseWriter, r *http.Request, pending, address, method string, facts claims.Facts) {
 	refuse := func(token, message string) {
 		step := loginStep{Pending: token, Error: message}
 		if token != "" {
@@ -160,7 +176,7 @@ func (s *Server) finishMailStep(w http.ResponseWriter, r *http.Request, pending,
 		refuse("", expiredStepMessage)
 		return
 	}
-	authCookie, ok := s.stepSession(w, r, address, method, method+"+email_pin")
+	authCookie, ok := s.stepSession(w, r, address, method, method+"+email_pin", facts)
 	if !ok {
 		return
 	}
@@ -175,7 +191,7 @@ func (s *Server) finishMailStep(w http.ResponseWriter, r *http.Request, pending,
 func (s *Server) renderEnrolStep(w http.ResponseWriter, r *http.Request, step loginStep, status int) {
 	step.Step = otp.StepEnrol
 	step.EnrolTOTP = s.canEnrolTOTP()
-	step.EnrolKey = s.canEnrolKey()
+	step.EnrolKey = s.canEnrolKey() && !step.radius
 	s.renderLoginStep(w, r, step, status)
 }
 
@@ -187,10 +203,12 @@ func (s *Server) renderEnrolStep(w http.ResponseWriter, r *http.Request, step lo
 //     code proves the app, so it is the second factor;
 //   - "key" sends the browser to enroll a security key with a one-time invite,
 //     after which the key signs in by itself.
-func (s *Server) enrolStep(w http.ResponseWriter, r *http.Request, pending, address, method string) {
+func (s *Server) enrolStep(w http.ResponseWriter, r *http.Request, pending, address, method string, facts claims.Facts) {
 	ctx := r.Context()
+	radiusAccount := method == auth.MethodRadius
 	page := func(step loginStep, status int) {
 		step.Pending = pending
+		step.radius = radiusAccount
 		s.renderEnrolStep(w, r, step, status)
 	}
 	switch r.PostFormValue("action") {
@@ -235,7 +253,7 @@ func (s *Server) enrolStep(w http.ResponseWriter, r *http.Request, pending, addr
 		}
 		s.logger.Info(fmt.Sprintf("TOTP key added by %s from %s, at sign-in", address, s.clients.Addr(r)))
 		s.notifyAccountChange(address, "An authenticator app was added to this account while signing in. Signing in now needs a code from it.")
-		authCookie, ok := s.stepSession(w, r, address, method, method+"+totp")
+		authCookie, ok := s.stepSession(w, r, address, method, method+"+totp", facts)
 		if !ok {
 			return
 		}
@@ -251,7 +269,8 @@ func (s *Server) enrolStep(w http.ResponseWriter, r *http.Request, pending, addr
 		}, http.StatusOK)
 
 	case "key":
-		if !s.canEnrolKey() {
+		// A key signs in by itself, which a RADIUS account may not.
+		if !s.canEnrolKey() || radiusAccount {
 			page(loginStep{Error: "Security keys are not offered here."}, http.StatusForbidden)
 			return
 		}

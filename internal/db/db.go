@@ -140,6 +140,14 @@ func migrate(database *sql.DB) error {
 		return err
 	}
 
+	// What a sign-in learned besides who it was (claims.Facts): the RADIUS
+	// reply, kept for claims refreshes.  Tables from before RADIUS lack it.
+	if _, err := tx.Exec(`ALTER TABLE sessions ADD COLUMN facts TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		tx.Rollback()
+		return fmt.Errorf("adding the facts column: %w", err)
+	}
+
 	if err := hashSessionTokens(tx); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("hashing session tokens: %w", err)

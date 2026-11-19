@@ -438,3 +438,62 @@ func TestShippedConfigsLoad(t *testing.T) {
 		}
 	}
 }
+
+func TestRadiusSettings(t *testing.T) {
+	dir := t.TempDir()
+	secret := filepath.Join(dir, "radius.secret")
+	if err := os.WriteFile(secret, []byte("s3cret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	load := func(yaml string) (*Config, error) {
+		path := filepath.Join(dir, "config.yaml")
+		if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return LoadConfig(path)
+	}
+	cfg, err := load(`radius:
+  enabled: true
+  nas_identifier: "wiki"
+  servers:
+    - address: "radius.example.com"
+      secret_file: "` + secret + `"
+    - address: "[2001:db8::1]:1645"
+      secret: "x"
+      auth: "mschapv2"
+  group_attributes: ["Filter-Id", "vendor:12356:1"]
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := cfg.Radius
+	if r.Servers[0].Address != "radius.example.com:1812" || r.Servers[0].Auth != "pap" ||
+		r.Servers[1].Address != "[2001:db8::1]:1645" || r.Servers[1].Auth != "mschapv2" {
+		t.Errorf("servers %+v", r.Servers)
+	}
+	if r.TimeoutSec != 3 || r.Retries != 2 || !r.RequireMessageAuthenticator {
+		t.Errorf("defaults %+v", r)
+	}
+
+	bad := map[string]string{
+		"no NAS-Identifier": "radius: {enabled: true, servers: [{address: a, secret: x}]}",
+		"no servers":        "radius: {enabled: true, nas_identifier: wiki}",
+		"two secrets":       "radius: {enabled: true, nas_identifier: wiki, servers: [{address: a, secret: x, secret_file: " + secret + "}]}",
+		"no secret":         "radius: {enabled: true, nas_identifier: wiki, servers: [{address: a}]}",
+		"missing file":      "radius: {enabled: true, nas_identifier: wiki, servers: [{address: a, secret_file: " + secret + ".gone}]}",
+		"chap":              "radius: {enabled: true, nas_identifier: wiki, servers: [{address: a, secret: x, auth: chap}]}",
+		"timeout":           "radius: {enabled: true, nas_identifier: wiki, timeout_seconds: 0, servers: [{address: a, secret: x}]}",
+		"groups":            "radius: {enabled: true, nas_identifier: wiki, group_attributes: [Groups], servers: [{address: a, secret: x}]}",
+		"no passwords":      "auth_methods: {password: disabled}\nradius: {enabled: true, nas_identifier: wiki, servers: [{address: a, secret: x}]}",
+		"unknown key":       "radius: {enabled: true, nas_identifier: wiki, server: [{address: a, secret: x}]}",
+	}
+	for name, yaml := range bad {
+		if _, err := load(yaml); err == nil {
+			t.Errorf("%s: loaded", name)
+		}
+	}
+	// Off, nothing in it is checked.
+	if _, err := load("radius: {enabled: false, servers: [{address: a}]}"); err != nil {
+		t.Errorf("off: %v", err)
+	}
+}

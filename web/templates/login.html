@@ -307,17 +307,17 @@
     <h1>🔐 Signet Login</h1>
 
     <div id="error-message" class="error-message{{if .Error}} visible{{end}}">{{.Error}}</div>
-    <div id="success-message" class="success-message{{if .Message}} visible{{end}}">{{.Message}}</div>
+    <div id="success-message" class="success-message{{if and .Message (ne .Step "radius")}} visible{{end}}">{{if ne .Step "radius"}}{{.Message}}{{end}}</div>
 
-    <form id="code-form" method="POST" action="{{basePath}}/login"{{if not (or (eq .Step "code") (eq .Step "mail"))}} hidden{{end}}>
+    <form id="code-form" method="POST" action="{{basePath}}/login"{{if not (or (eq .Step "code") (eq .Step "mail") (eq .Step "radius"))}} hidden{{end}}>
       <input type="hidden" id="code-pending" name="pending" value="{{if ne .Step "enrol"}}{{.Pending}}{{end}}">
       <input type="hidden" name="referrer" value="{{.Referrer}}">
       <div class="form-group">
-        <label for="code" id="code-label">{{if eq .Step "mail"}}PIN from the message just sent to you{{else}}Code from your authenticator{{end}}</label>
+        <label for="code" id="code-label">{{if eq .Step "mail"}}PIN from the message just sent to you{{else if eq .Step "radius"}}{{or .Message "The sign-in server asks for one more answer"}}{{else}}Code from your authenticator{{end}}</label>
         <input type="text" id="code" name="code" required autocomplete="one-time-code" placeholder="123456">
       </div>
       <button type="submit" class="btn-primary">Verify Code</button>
-      <p class="code-hint" id="code-hint"{{if eq .Step "mail"}} hidden{{end}}>Lost your authenticator? Enter a recovery code instead.</p>
+      <p class="code-hint" id="code-hint"{{if or (eq .Step "mail") (eq .Step "radius")}} hidden{{end}}>Lost your authenticator? Enter a recovery code instead.</p>
     </form>
 
     {{if eq .Step "enrol"}}
@@ -379,8 +379,13 @@
     {{if .PasswordEnabled}}
     <form id="login-form">
       <div class="form-group">
+        {{if .RadiusEnabled}}
+        <label for="email">Email address or user name</label>
+        <input type="text" id="email" name="email" required autocomplete="username" autocapitalize="none" placeholder="you@example.com">
+        {{else}}
         <label for="email">Email Address</label>
         <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@example.com">
+        {{end}}
       </div>
 
       <div class="form-group">
@@ -541,12 +546,16 @@
 
     // An account with TOTP also needs a code, whichever way it got this far.
     // After a password, the second step may instead be a mailed PIN.
-    function askForCode(pending, step) {
+    function askForCode(pending, step, message) {
       hideMessages();
       document.getElementById('sign-in-methods').hidden = true;
       document.getElementById('code-pending').value = pending;
       if (step === 'mail') {
         document.getElementById('code-label').textContent = 'PIN from the message just sent to you';
+        document.getElementById('code-hint').hidden = true;
+      } else if (step === 'radius') {
+        // The RADIUS server's prompt, as text.
+        document.getElementById('code-label').textContent = message || 'The sign-in server asks for one more answer';
         document.getElementById('code-hint').hidden = true;
       }
       document.getElementById('code-form').hidden = false;
@@ -555,7 +564,7 @@
 
     // The second step the server asked for.  Adding a second factor is a page of
     // its own, which the server draws for the step's token.
-    function askForStep(pending, step) {
+    function askForStep(pending, step, message) {
       if (step === 'enrol') {
         const form = document.createElement('form');
         form.method = 'POST';
@@ -571,7 +580,7 @@
         form.submit();
         return;
       }
-      askForCode(pending, step);
+      askForCode(pending, step, message);
     }
 
     // Handle password login form submission
@@ -603,7 +612,7 @@
           : { success: false, error: (await response.text()).trim() };
 
         if (data.pending) {
-          askForStep(data.pending, data.step || 'code');
+          askForStep(data.pending, data.step || 'code', data.message);
         } else if (data.success) {
           window.location.href = safeTarget(data.redirect || returnTo());
         } else {
@@ -722,7 +731,7 @@
           const data = await response.json();
 
           if (data.pending) {
-            askForStep(data.pending, data.step || 'code');
+            askForStep(data.pending, data.step || 'code', data.message);
           } else if (data.success) {
             showSuccess('Login successful! Redirecting...');
             setTimeout(() => {

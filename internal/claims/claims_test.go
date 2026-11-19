@@ -15,6 +15,7 @@ import (
 
 	"github.com/obtusenet/signet/internal/config"
 	"github.com/obtusenet/signet/internal/logging"
+	"github.com/obtusenet/signet/internal/radius"
 )
 
 func TestClaimsHookDisabled(t *testing.T) {
@@ -370,15 +371,68 @@ func TestClaimsHookReload(t *testing.T) {
 	}
 }
 
-// The request names the address and nothing else: the session token is a bearer
-// secret and never reaches the hook.
+// The request names the account and its source, and nothing else: the session
+// token is a bearer secret and never reaches the hook.
 func TestClaimRequestJSON(t *testing.T) {
-	data, err := json.Marshal(ClaimRequest{Type: "claim_request", Email: "test@example.com"})
+	data, err := json.Marshal(ClaimRequest{Type: "claim_request", Email: "test@example.com", Source: SourceLocal})
 	if err != nil {
 		t.Fatalf("failed to marshal: %v", err)
 	}
-	if want := `{"type":"claim_request","email":"test@example.com"}`; string(data) != want {
+	if want := `{"type":"claim_request","email":"test@example.com","source":"local"}`; string(data) != want {
 		t.Errorf("got %s, want %s", data, want)
+	}
+}
+
+// A RADIUS account's request carries what the server said.
+func TestClaimRequestRadius(t *testing.T) {
+	f := Facts{Source: SourceRadius, Radius: &RadiusFacts{
+		NASIdentifier: "wiki", Groups: []string{"wiki-admins"},
+		Attributes: []radius.AttributeView{{Type: 11, Name: "Filter-Id", Value: "wiki-admins"}},
+	}}
+	data, err := json.Marshal(ClaimRequest{Type: "claim_request", Email: "jdoe", Source: f.Source, Radius: f.Radius})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"type":"claim_request","email":"jdoe","source":"radius","radius":{"nas_identifier":"wiki","groups":["wiki-admins"],"attributes":[{"type":11,"name":"Filter-Id","value":"wiki-admins"}]}}`
+	if string(data) != want {
+		t.Errorf("got  %s\nwant %s", data, want)
+	}
+}
+
+func TestFacts(t *testing.T) {
+	if LocalFacts.String() != "" {
+		t.Error("local facts are stored as something")
+	}
+	if f, err := ParseFacts(""); err != nil || f.Source != SourceLocal || len(f.DefaultClaims()) != 0 {
+		t.Errorf("empty facts: %+v, %v", f, err)
+	}
+	r := Facts{Source: SourceRadius, Radius: &RadiusFacts{NASIdentifier: "wiki"}}
+	back, err := ParseFacts(r.String())
+	if err != nil || back.Source != SourceRadius || back.Radius.NASIdentifier != "wiki" {
+		t.Errorf("round trip: %+v, %v", back, err)
+	}
+	if g, ok := back.DefaultClaims()["groups"].([]string); !ok || g == nil || len(g) != 0 {
+		t.Errorf("no groups should be [], got %#v", back.DefaultClaims())
+	}
+	if _, err := ParseFacts("{"); err == nil {
+		t.Error("bad facts parsed")
+	}
+}
+
+// Without a hook, a RADIUS account's claims are its groups.
+func TestClaimsForWithoutHook(t *testing.T) {
+	logger, err := logging.New(false, "debug")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := NewClaimsHook(config.ClaimsHookConfig{}, logger)
+	f := Facts{Source: SourceRadius, Radius: &RadiusFacts{Groups: []string{"a", "b"}}}
+	got, err := hook.ClaimsFor(context.Background(), "jdoe", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := got["groups"].([]string); len(g) != 2 {
+		t.Errorf("got %#v", got)
 	}
 }
 
@@ -590,7 +644,7 @@ func TestHookReadsOnlyTheAddress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "{\"type\":\"claim_request\",\"email\":\"a@example.com\"}\n"; string(read) != want {
+	if want := "{\"type\":\"claim_request\",\"email\":\"a@example.com\",\"source\":\"local\"}\n"; string(read) != want {
 		t.Errorf("the hook read %q, want %q", read, want)
 	}
 }

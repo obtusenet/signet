@@ -710,6 +710,116 @@ Window in seconds for
 Default: 60.
 .El
 .Pp
+The RADIUS client.
+With it on, a password sign-in for a name the CSV file does not have is
+checked by RADIUS servers (RFC 2865, over UDP).
+A name the file has, in any state, never goes to them, so local accounts work
+while the servers are down and their passwords stay on this host.
+A RADIUS name need not be a mail address; it is sent exactly as typed.
+A RADIUS account has no password here, no mailed PIN, recovery or security
+key, and gets no account-change notices.
+An authenticator app may follow its password as a second factor, as
+.Li second_factor
+says, and with
+.Li second_factor
+.Dq required
+it adds one at sign-in.
+.Bl -tag -width Ds
+.It Li radius.enabled
+Whether RADIUS checks names the CSV file lacks.
+It needs
+.Li auth_methods.password .
+Default: false.
+.It Li radius.nas_identifier
+The application, sent as
+.Li NAS-Identifier
+(RFC 2865 section 5.32), so that a server can answer each application
+differently.
+Required when RADIUS is on.
+.It Li radius.servers
+The servers, tried in order until one answers.
+Each has:
+.Bl -tag -width Ds
+.It Li address
+.Ar host
+or
+.Ar host : Ns Ar port ;
+the port defaults to 1812.
+.It Li secret , secret_file
+The shared secret, or a file holding it; exactly one.
+A file is read at start and at each reload, and a final newline is not part of
+the secret.
+.It Li auth
+.Dq pap ,
+the default, or
+.Dq mschapv2 .
+A challenge (below) works with PAP only.
+.El
+.It Li radius.timeout_seconds
+How long each try waits for a reply, 1 to 60.
+Default: 3.
+.It Li radius.retries
+More tries per server after the first, 0 to 10.
+A retry keeps the request's identifier and authenticator.
+Default: 2.
+.It Li radius.group_attributes
+The reply attributes whose values are the account's groups:
+.Dq Filter-Id ,
+.Dq Class ,
+an attribute number, or
+.Dq vendor: Ns Ar id : Ns Ar type
+for a vendor attribute.
+Each value is one group; values that are not printable text are left out and
+logged.
+Default:
+.Dq Filter-Id .
+.It Li radius.require_message_authenticator
+Drop replies without a
+.Li Message-Authenticator
+(RFC 3579 section 3.2).
+Requests always carry one.
+Turning this off exposes sign-ins to forged replies (CVE-2024-3596); do so only
+for a server that cannot send it.
+Default: true.
+.El
+.Pp
+Each request carries
+.Li User-Name ,
+the password
+.Pq Li User-Password , No or Li MS-CHAP-Challenge No and Li MS-CHAP2-Response ,
+.Li NAS-Identifier ,
+.Li NAS-Port-Type
+Virtual,
+.Li Service-Type
+Login,
+.Li Message-Authenticator ,
+and
+.Li Calling-Station-Id ,
+the client's IP address, when the client has one.
+Every reply's Response Authenticator is checked, and an MS-CHAPv2
+Access-Accept must carry an
+.Li MS-CHAP2-Success
+that proves the server knew the password.
+.Pp
+An Access-Accept signs in, unless a second factor follows.
+The session's claims are
+.Dq groups ,
+or what the claims hook makes of the reply; see
+.Xr signet-hooks 5 .
+The groups are fixed for the session's life:
+a claims refresh gives the hook the reply stored at sign-in.
+An Access-Challenge asks for one more answer, with the server's
+.Li Reply-Message
+as the prompt, up to 3 times in one sign-in.
+An Access-Reject counts as a failed sign-in.
+When no server gives a valid reply, the sign-in fails with
+.Sy 503
+and the log names each server's problem.
+.Pp
+PAP over UDP hides the password with MD5 and the shared secret, and MS-CHAPv2
+can be attacked offline from a captured exchange.
+Keep RADIUS on a trusted network, or under IPsec.
+.Pp
 The cookie configuration:
 .Bl -tag -width Ds
 .It Li cookie_name

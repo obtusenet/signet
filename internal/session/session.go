@@ -32,8 +32,11 @@ type Session struct {
 	UserEmail  string
 	AuthMethod string
 	Claims     string // JSON serialized
-	CreatedAt  time.Time
-	ExpiresAt  time.Time
+	// Facts are what the sign-in learned besides who it was, as
+	// claims.Facts encodes them: "" for a users.csv account.
+	Facts     string
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 // Store manages sessions in the database
@@ -49,12 +52,13 @@ func NewStore(db *sql.DB) *Store {
 // Create creates a new session
 func (s *Store) Create(ctx context.Context, session *Session) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO sessions (token, user_email, auth_method, claims, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sessions (token, user_email, auth_method, claims, facts, created_at, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		HashToken(session.Token),
 		session.UserEmail,
 		session.AuthMethod,
 		session.Claims,
+		session.Facts,
 		session.CreatedAt,
 		session.ExpiresAt,
 	)
@@ -68,13 +72,14 @@ func (s *Store) Create(ctx context.Context, session *Session) error {
 func (s *Store) Get(ctx context.Context, token string) (*Session, error) {
 	session := Session{Token: token}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT user_email, auth_method, claims, created_at, expires_at
+		`SELECT user_email, auth_method, claims, facts, created_at, expires_at
 		 FROM sessions WHERE token = ?`,
 		HashToken(token),
 	).Scan(
 		&session.UserEmail,
 		&session.AuthMethod,
 		&session.Claims,
+		&session.Facts,
 		&session.CreatedAt,
 		&session.ExpiresAt,
 	)

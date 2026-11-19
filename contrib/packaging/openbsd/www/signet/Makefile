@@ -92,10 +92,14 @@ post-install:
 	${INSTALL_DATA_DIR} ${PREFIX}/share/examples/signet/hooks
 	${INSTALL_SCRIPT} ${WRKSRC}/examples/hooks/claims-hook.sh \
 		${WRKSRC}/examples/hooks/claims-hook.py \
+		${WRKSRC}/examples/hooks/radius-claims.py \
 		${WRKSRC}/examples/hooks/test-hooks.sh \
 		${PREFIX}/share/examples/signet/hooks/
 	${INSTALL_DATA} ${WRKSRC}/examples/hooks/README.md \
 		${PREFIX}/share/examples/signet/hooks/
+	${INSTALL_DATA_DIR} ${PREFIX}/share/examples/signet/radius
+	${INSTALL_DATA} ${WRKSRC}/examples/radius/README.md \
+		${PREFIX}/share/examples/signet/radius/
 	${INSTALL_DATA_DIR} ${PREFIX}/share/examples/signet/web-servers/caddy
 	${INSTALL_DATA_DIR} ${PREFIX}/share/examples/signet/web-servers/nginx
 	${INSTALL_DATA_DIR} ${PREFIX}/share/examples/signet/web-servers/openbsd-httpd

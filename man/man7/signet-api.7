@@ -197,6 +197,12 @@ Form-encoded with
 .Va password
 and optionally
 .Va referrer .
+With
+.Va radius.enabled ,
+.Va email
+may be a plain name, and a name the CSV file lacks is checked by the RADIUS
+servers; see
+.Sx RADIUS accounts .
 .Bl -tag -width Ds -compact
 .It Sy 200
 JSON
@@ -217,6 +223,8 @@ is disabled, or the claims hook refused under
 .Li fail-closed .
 .It Sy 500
 the page could not be rendered.
+.It Sy 503
+no RADIUS server gave a valid reply, for a name the CSV file lacks.
 .El
 .Pp
 The redirect target is, in order, the posted
@@ -268,9 +276,26 @@ to
  "claims_refreshed":false, "avatar":null}
 .Ed
 and the
-.Ev Remote-User ,
+.Ev Remote-User
+header, and
 .Ev Remote-Email
-headers.
+when the account is a mail address.
+A RADIUS account named
+.Li jdoe
+has
+.Li "email":""
+and no
+.Ev Remote-Email .
+.Li method
+is
+.Li password ,
+.Li email_pin ,
+.Li webauthn
+or
+.Li radius ,
+followed by
+.Li +
+and the second step when there was one.
 .Li avatar
 is the URL of the account's picture, or
 .Li null
@@ -295,6 +320,7 @@ seconds; past that the stored claims are answered with
 .Li "claims_refreshed":false ,
 as when the hook fails.
 Without a configured hook the parameter does nothing.
+For a RADIUS account the hook is given the reply stored at sign-in.
 .It Cm GET /logout , Cm POST /logout
 Deletes the session row and expires the cookie
 .Pq Li Max-Age=0 .
@@ -446,6 +472,64 @@ to remove an account's last app or key, unless
 .Va second_factor_methods
 lists
 .Li email_pin .
+.Ss RADIUS accounts
+With
+.Va radius.enabled ,
+a password for a name the CSV file does not have is checked by the RADIUS
+servers
+.Pq Xr signet-config.yaml 5 .
+A name the file has never goes to them.
+.Bl -tag -width Ds
+.It Access-Accept
+As a password: the session's
+.Li method
+is
+.Li radius ,
+and its claims are
+.Li {"groups":[...]} ,
+or the claims hook's answer
+.Pq Xr signet-hooks 5 .
+An authenticator app's code may follow
+.Pq Li radius+totp .
+.It Access-Challenge
+No session.
+JSON gets
+.Bd -literal -offset indent
+{"success":false,"step":"radius","pending":"...",
+ "message":"the server's Reply-Message"}
+.Ed
+and a form gets the page asking for it.
+.Cm POST /login
+with
+.Va pending
+and
+.Va code
+set to the answer sends it, with the challenge's
+.Li State ,
+to the server that asked.
+One answer spends the step, which lasts five minutes; a sign-in answers at most
+three challenges.
+.It Access-Reject
+.Sy 401 ,
+counted as a failed sign-in.
+.It No reply
+.Sy 503 ,
+not counted against the account.
+.El
+.Pp
+A RADIUS account has no password, PIN, recovery, registration or security key
+here; each answers as for an unknown address.
+With
+.Va second_factor
+.Dq required
+it takes only the
+.Dq code
+or
+.Dq enrol
+step, and adds only an app.
+.Pa /account
+shows its apps and picture, and refuses a password change with
+.Sy 403 .
 .Ss Account
 .Bl -tag -width Ds
 .It Cm GET /account

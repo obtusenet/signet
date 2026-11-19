@@ -16,6 +16,7 @@ import (
 
 	gowebauthn "github.com/go-webauthn/webauthn/webauthn"
 
+	"github.com/obtusenet/signet/internal/claims"
 	"github.com/obtusenet/signet/internal/config"
 	"github.com/obtusenet/signet/internal/webauthn"
 )
@@ -223,11 +224,11 @@ func TestSecondFactorEnrolAKey(t *testing.T) {
 // A PIN as the first step is not followed by another PIN.
 func TestSecondFactorPINFirstEnrols(t *testing.T) {
 	s := requiredServer(t, "totp", "email_pin")
-	pending, step, err := s.secondStep(context.Background(), recoveryUser, "email_pin")
+	pending, step, err := s.secondStep(context.Background(), recoveryUser, "email_pin", claims.LocalFacts)
 	if err != nil || pending == "" || step != "enrol" {
 		t.Errorf("%q %q %v", pending, step, err)
 	}
-	pending, step, err = s.secondStep(context.Background(), recoveryUser, "password")
+	pending, step, err = s.secondStep(context.Background(), recoveryUser, "password", claims.LocalFacts)
 	if err != nil || pending == "" || step != "mail" {
 		t.Errorf("%q %q %v", pending, step, err)
 	}

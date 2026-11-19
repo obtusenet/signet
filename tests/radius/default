@@ -1,0 +1,63 @@
+# Copyright (c) 2026 Obtuse Networking LLC
+# SPDX-License-Identifier: MIT
+#
+# The FreeRADIUS virtual server for tests/radius_test.sh: PAP and MS-CHAPv2
+# against the users file, and one user who is challenged for a code.
+
+server default {
+	listen {
+		type = auth
+		ipaddr = *
+		port = 1812
+	}
+
+	authorize {
+		# otp-user: a password, then a challenge for 123456.
+		if (&User-Name == "otp-user") {
+			if (&State) {
+				if ((&State == "round-1") && (&User-Password == "123456")) {
+					update control {
+						&Auth-Type := Accept
+					}
+					update reply {
+						&Filter-Id := "tokens"
+					}
+					updated
+					return
+				}
+				reject
+			}
+			elsif (&User-Password == "radius-pw") {
+				update reply {
+					&Reply-Message := "Enter the code from your token"
+					&State := "round-1"
+				}
+				update control {
+					&Response-Packet-Type := Access-Challenge
+				}
+				handled
+			}
+			else {
+				reject
+			}
+		}
+		files
+		mschap
+		pap
+	}
+
+	authenticate {
+		Auth-Type PAP {
+			pap
+		}
+		Auth-Type mschap {
+			mschap
+		}
+	}
+
+	post-auth {
+		Post-Auth-Type REJECT {
+			attr_filter.access_reject
+		}
+	}
+}

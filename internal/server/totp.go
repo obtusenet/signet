@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/obtusenet/signet/internal/auth"
+	"github.com/obtusenet/signet/internal/claims"
 	"github.com/obtusenet/signet/internal/db"
 	"github.com/obtusenet/signet/internal/otp"
 	"github.com/obtusenet/signet/internal/session"
@@ -95,18 +96,33 @@ func (s *Server) finishSecondStep(w http.ResponseWriter, r *http.Request) {
 		refuse("", expiredStepMessage)
 		return
 	}
+	data, err := s.steps.StepData(r.Context(), pending)
+	if err != nil {
+		refuse("", expiredStepMessage)
+		return
+	}
 	// The account may have been locked since the first step.
-	if _, err := s.accounts.Check(address); err != nil {
+	if err := s.stepAccountAllowed(address, method); err != nil {
 		s.logger.Warn(fmt.Sprintf("code step refused for %s: %v", address, err))
+		refuse("", expiredStepMessage)
+		return
+	}
+	if step == otp.StepRadius {
+		s.finishRadiusStep(w, r, pending, address, data)
+		return
+	}
+	facts, err := claims.ParseFacts(data)
+	if err != nil {
+		s.logger.Error(fmt.Sprintf("sign-in step of %s: %v", address, err))
 		refuse("", expiredStepMessage)
 		return
 	}
 	switch step {
 	case otp.StepMail:
-		s.finishMailStep(w, r, pending, address, method)
+		s.finishMailStep(w, r, pending, address, method, facts)
 		return
 	case otp.StepEnrol:
-		s.enrolStep(w, r, pending, address, method)
+		s.enrolStep(w, r, pending, address, method, facts)
 		return
 	}
 	if s.totp == nil {
@@ -182,7 +198,7 @@ func (s *Server) finishSecondStep(w http.ResponseWriter, r *http.Request) {
 	}
 	s.totpLimit.Reset(address)
 
-	authCookie, ok := s.stepSession(w, r, address, method, method+"+"+how)
+	authCookie, ok := s.stepSession(w, r, address, method, method+"+"+how, facts)
 	if !ok {
 		return
 	}

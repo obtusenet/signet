@@ -15,6 +15,7 @@ import (
 
 	"github.com/obtusenet/signet/internal/config"
 	"github.com/obtusenet/signet/internal/logging"
+	"github.com/obtusenet/signet/internal/radius"
 )
 
 // ClaimsHook represents the external claims hook
@@ -25,10 +26,76 @@ type ClaimsHook struct {
 }
 
 // ClaimRequest is sent to the child process.  It carries no session token: the
-// token is a bearer secret, and a hook decides from the address alone.
+// token is a bearer secret, and a hook decides from the account alone.
 type ClaimRequest struct {
-	Type  string `json:"type"`
-	Email string `json:"email"`
+	Type   string       `json:"type"`
+	Email  string       `json:"email"`
+	Source string       `json:"source"`
+	Radius *RadiusFacts `json:"radius,omitempty"`
+}
+
+// Sources of an account, as Facts.Source and the hook's "source" name them.
+const (
+	SourceLocal  = "local"  // users.csv
+	SourceRadius = "radius" // a RADIUS server accepted it
+)
+
+// Facts are what a sign-in learned about the account besides who it is.  A
+// session keeps them, so a claims refresh sees what the sign-in saw.
+type Facts struct {
+	Source string       `json:"source"`
+	Radius *RadiusFacts `json:"radius,omitempty"`
+}
+
+// RadiusFacts are what a RADIUS server's Access-Accept said.
+type RadiusFacts struct {
+	NASIdentifier string                 `json:"nas_identifier"`
+	Groups        []string               `json:"groups"`
+	Attributes    []radius.AttributeView `json:"attributes"`
+}
+
+// LocalFacts are the facts of a users.csv account: none.
+var LocalFacts = Facts{Source: SourceLocal}
+
+// ParseFacts reads facts a session or a sign-in step stored; "" is a local
+// account, as sessions made before RADIUS support are.
+func ParseFacts(s string) (Facts, error) {
+	if s == "" {
+		return LocalFacts, nil
+	}
+	var f Facts
+	if err := json.Unmarshal([]byte(s), &f); err != nil {
+		return LocalFacts, fmt.Errorf("reading sign-in facts: %w", err)
+	}
+	if f.Source == "" {
+		f.Source = SourceLocal
+	}
+	return f, nil
+}
+
+// String encodes facts for storing; a local account's are "".
+func (f Facts) String() string {
+	if f.Source == "" || f.Source == SourceLocal {
+		return ""
+	}
+	b, err := json.Marshal(f)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// DefaultClaims are the claims without a hook: a RADIUS account's groups, and
+// nothing for a local one.
+func (f Facts) DefaultClaims() map[string]interface{} {
+	if f.Radius != nil {
+		groups := f.Radius.Groups
+		if groups == nil {
+			groups = []string{}
+		}
+		return map[string]interface{}{"groups": groups}
+	}
+	return map[string]interface{}{}
 }
 
 // ClaimResponse is received from the child process
@@ -47,17 +114,27 @@ func NewClaimsHook(cfg config.ClaimsHookConfig, logger *logging.Logger) *ClaimsH
 	}
 }
 
-// GetClaims invokes the external claims hook and returns the claims
+// GetClaims answers the claims of a local account.
 func (h *ClaimsHook) GetClaims(ctx context.Context, email string) (map[string]interface{}, error) {
-	if !h.cfg.Enabled {
-		h.logger.Debug("claims hook disabled, returning empty claims")
-		return map[string]interface{}{}, nil
+	return h.ClaimsFor(ctx, email, LocalFacts)
+}
+
+// ClaimsFor answers an account's claims: the hook's, when it is on, and the
+// facts' default claims otherwise.  The hook is given the facts.
+func (h *ClaimsHook) ClaimsFor(ctx context.Context, email string, facts Facts) (map[string]interface{}, error) {
+	if h == nil || !h.cfg.Enabled {
+		return facts.DefaultClaims(), nil
+	}
+	if facts.Source == "" {
+		facts.Source = SourceLocal
 	}
 
 	// Create request
 	req := ClaimRequest{
-		Type:  "claim_request",
-		Email: email,
+		Type:   "claim_request",
+		Email:  email,
+		Source: facts.Source,
+		Radius: facts.Radius,
 	}
 
 	// Marshal request
